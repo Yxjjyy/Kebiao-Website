@@ -1,0 +1,21 @@
+[Unit]
+Description=Kebiao Backend API
+After=network.target
+
+[Service]
+User=kebiao
+Group=kebiao
+WorkingDirectory=/home/kebiao/app/backend
+EnvironmentFile=/home/kebiao/app/backend/.env
+ExecStart=/home/kebiao/app/backend/.venv/bin/gunicorn app.main:app \
+    --workers 2 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind 127.0.0.1:8000 \
+    --access-logfile /var/log/kebiao/access.log \
+    --error-logfile /var/log/kebiao/error.log \
+    --log-level info
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

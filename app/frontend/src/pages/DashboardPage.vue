@@ -1,0 +1,581 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import AppShell from '@/components/layout/AppShell.vue'
+import SettingsPanel from '@/components/layout/SettingsPanel.vue'
+import CreateLessonModal from '@/components/schedule/CreateLessonModal.vue'
+import DayView from '@/components/schedule/DayView.vue'
+import LessonEditModal from '@/components/schedule/LessonEditModal.vue'
+import MonthView from '@/components/schedule/MonthView.vue'
+import RescheduleLessonModal from '@/components/schedule/RescheduleLessonModal.vue'
+import RescheduleModeModal from '@/components/schedule/RescheduleModeModal.vue'
+import ScheduleBoard from '@/components/schedule/ScheduleBoard.vue'
+import StatsPanel from '@/components/stats/StatsPanel.vue'
+import TemplateManager from '@/components/students/TemplateManager.vue'
+import StudentsPanel from '@/components/students/StudentsPanel.vue'
+import StudentFormModal from '@/components/students/StudentFormModal.vue'
+import TemplateFormModal from '@/components/students/TemplateFormModal.vue'
+import { exportApi } from '@/api/export'
+import { lessonsApi } from '@/api/lessons'
+import { statsApi } from '@/api/stats'
+import { studentsApi } from '@/api/students'
+import { templatesApi } from '@/api/templates'
+import type {
+  ComparisonStats,
+  LeaveItem,
+  Lesson,
+  RangeStats,
+  Student,
+  StudentStatsRow,
+  Template,
+  TodayStats,
+} from '@/api/types'
+import { addDays, format } from 'date-fns'
+import { getOffsetMonthRange, getOffsetWeekRange, getWeekRange, toIsoDate } from '@/lib/date'
+import { useSettingsStore } from '@/stores/settings'
+
+const settingsStore = useSettingsStore()
+const route = useRoute()
+const activeTab = ref<string>('schedule')
+const loading = ref(false)
+
+const lessons = ref<Lesson[]>([])
+const students = ref<Student[]>([])
+const todayStats = ref<TodayStats | null>(null)
+const rangeStats = ref<RangeStats | null>(null)
+const comparisonStats = ref<ComparisonStats | null>(null)
+const ranking = ref<StudentStatsRow[]>([])
+const templates = ref<Template[]>([])
+const selectedLesson = ref<Lesson | null>(null)
+const selectedStudentId = ref<number | null>(null)
+const statRange = ref<'today' | 'week' | 'month'>('month')
+const statsOffset = ref(0)
+const leaveItems = ref<LeaveItem[]>([])
+const quickCreate = ref<{ date: string; start_time: string } | null>(null)
+const scheduleError = ref('')
+const bulkSelectedIds = ref<number[]>([])
+const weekOffset = ref(0)
+const refreshKey = ref(0)
+const viewMode = ref<'week' | 'month' | 'day'>('week')
+const selectedDay = ref('')
+const monthDate = ref(new Date())
+
+const showCreateLesson = ref(false)
+const showStudentForm = ref(false)
+const studentFormMode = ref<'create' | 'edit'>('create')
+const editingStudent = ref<Student | null>(null)
+const showTemplateForm = ref(false)
+const templateFormMode = ref<'create' | 'edit'>('create')
+const editingTemplate = ref<Template | null>(null)
+const showRescheduleMode = ref(false)
+const pendingMovePayload = ref<{ lesson: Lesson; date: string; start_time: string } | null>(null)
+const showRescheduleLesson = ref(false)
+const rescheduleTarget = ref<Lesson | null>(null)
+
+const currentWeekStart = computed(() => addDays(new Date(), weekOffset.value * 7))
+
+const weekRangeLabel = computed(() => {
+  const range = getWeekRange(currentWeekStart.value, (settingsStore.settings.week_start as 0 | 1) ?? 1)
+  return `${format(range.start, 'M月d日')} - ${format(range.end, 'M月d日')}`
+})
+
+const currencySymbol = computed(() => settingsStore.settings.currency_symbol)
+const statRangeLabel = computed(() =>
+  statRange.value === 'today' ? '今日' : statRange.value === 'week' ? '本周' : '本月'
+)
+
+const statsPeriodLabel = computed(() => {
+  const range = getStatsRange(statsOffset.value)
+  if (statRange.value === 'today') {
+    return format(range.start, 'M月d日')
+  }
+  if (statRange.value === 'week') {
+    return `${format(range.start, 'M月d日')} - ${format(range.end, 'M月d日')}`
+  }
+  return format(range.start, 'yyyy年M月')
+})
+
+const isCurrentStatsPeriod = computed(() => statsOffset.value === 0 && statRange.value !== 'today')
+
+function tabFromPath(path: string): 'schedule' | 'students' | 'stats' | 'settings' {
+  if (path.startsWith('/students')) return 'students'
+  if (path.startsWith('/stats')) return 'stats'
+  if (path.startsWith('/settings')) return 'settings'
+  return 'schedule'
+}
+
+function prevWeek() { weekOffset.value-- }
+function nextWeek() { weekOffset.value++ }
+function goToToday() { weekOffset.value = 0; monthDate.value = new Date(); selectedDay.value = '' }
+
+function prevStatsPeriod() { statsOffset.value-- }
+function nextStatsPeriod() { if (statsOffset.value < 0) statsOffset.value++ }
+function goToCurrentStatsPeriod() { statsOffset.value = 0 }
+
+function handleViewChange(mode: 'week' | 'month' | 'day') {
+  viewMode.value = mode
+  if (mode === 'month') {
+    monthDate.value = addDays(new Date(), weekOffset.value * 7)
+  }
+}
+
+function handleDayClick(dateIso: string) {
+  selectedDay.value = dateIso
+  viewMode.value = 'day'
+}
+
+function handlePrevMonth() {
+  monthDate.value = new Date(monthDate.value.getFullYear(), monthDate.value.getMonth() - 1, 1)
+}
+
+function handleNextMonth() {
+  monthDate.value = new Date(monthDate.value.getFullYear(), monthDate.value.getMonth() + 1, 1)
+}
+
+function handlePrevDay() {
+  const d = new Date(selectedDay.value || toIsoDate(addDays(new Date(), weekOffset.value * 7)))
+  selectedDay.value = toIsoDate(addDays(d, -1))
+}
+
+function handleNextDay() {
+  const d = new Date(selectedDay.value || toIsoDate(addDays(new Date(), weekOffset.value * 7)))
+  selectedDay.value = toIsoDate(addDays(d, 1))
+}
+
+function getStatsRange(offset = 0) {
+  const today = new Date()
+  if (statRange.value === 'today') {
+    return { start: today, end: today, granularity: 'day' as const }
+  }
+  if (statRange.value === 'week') {
+    const week = getOffsetWeekRange(offset, (settingsStore.settings.week_start as 0 | 1) ?? 1)
+    return { start: week.start, end: week.end > today ? today : week.end, granularity: 'day' as const }
+  }
+  const month = getOffsetMonthRange(offset)
+  return { start: month.start, end: month.end > today ? today : month.end, granularity: 'week' as const }
+}
+
+async function loadDashboard() {
+  loading.value = true
+  try {
+    const week = getWeekRange(currentWeekStart.value, (settingsStore.settings.week_start as 0 | 1) ?? 1)
+    const statsRange = getStatsRange(statsOffset.value)
+    const [lessonRows, studentRows, today, range, comparison, studentRanking, leaveRows] = await Promise.all([
+      lessonsApi.list(toIsoDate(week.start), toIsoDate(week.end)),
+      studentsApi.list(false),
+      statsApi.today(),
+      statsApi.range(toIsoDate(statsRange.start), toIsoDate(statsRange.end), statsRange.granularity),
+      statsApi.comparison(statRange.value === 'month' ? 'month' : 'week'),
+      statsApi.students(toIsoDate(statsRange.start), toIsoDate(statsRange.end)),
+      statsApi.leave(toIsoDate(statsRange.start), toIsoDate(statsRange.end)),
+    ])
+    lessons.value = lessonRows
+    students.value = studentRows
+    todayStats.value = today
+    rangeStats.value = range
+    comparisonStats.value = comparison
+    ranking.value = studentRanking
+    leaveItems.value = leaveRows
+    if (!selectedStudentId.value && studentRows.length) {
+      selectedStudentId.value = studentRows[0].id
+    }
+    refreshKey.value++
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadTemplates() {
+  if (!selectedStudentId.value) {
+    templates.value = []
+    return
+  }
+  templates.value = await templatesApi.list(selectedStudentId.value)
+}
+
+async function downloadMonthReport() {
+  const range = getStatsRange(statsOffset.value)
+  const blob = await exportApi.downloadXlsx(toIsoDate(range.start), toIsoDate(range.end))
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `kebiao_${toIsoDate(range.start)}_${toIsoDate(range.end)}.xlsx`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+async function moveLesson(payload: { lesson: Lesson; date: string; start_time: string }) {
+  scheduleError.value = ''
+  pendingMovePayload.value = payload
+  showRescheduleMode.value = true
+}
+
+async function handleRescheduleMode(mode: '1' | '2' | '3') {
+  showRescheduleMode.value = false
+  const payload = pendingMovePayload.value
+  if (!payload) return
+
+  if (mode === '3') {
+    selectedStudentId.value = payload.lesson.student_id
+    activeTab.value = 'students'
+    scheduleError.value = '请在学生页编辑对应周课表模板'
+    return
+  }
+  if (mode === '2') {
+    scheduleError.value = '本次及以后需要批量重排后续实例；当前请通过模板编辑完成'
+    return
+  }
+  try {
+    await lessonsApi.update(payload.lesson.id, {
+      date: payload.date,
+      start_time: payload.start_time,
+      duration_hours: payload.lesson.duration_hours,
+      status: payload.lesson.status,
+    })
+    await loadDashboard()
+  } catch {
+    scheduleError.value = '移动失败：目标时间可能存在冲突'
+  }
+}
+
+function toggleBulkLesson(lesson: Lesson) {
+  if (bulkSelectedIds.value.includes(lesson.id)) {
+    bulkSelectedIds.value = bulkSelectedIds.value.filter((id) => id !== lesson.id)
+  } else {
+    bulkSelectedIds.value = [...bulkSelectedIds.value, lesson.id]
+  }
+}
+
+async function runBulkAction(action: 'complete' | 'cancel' | 'restore' | 'delete') {
+  if (!bulkSelectedIds.value.length) return
+  scheduleError.value = ''
+  try {
+    await lessonsApi.bulk({ ids: bulkSelectedIds.value, action })
+    bulkSelectedIds.value = []
+    await loadDashboard()
+  } catch {
+    scheduleError.value = '批量操作失败：请检查所选课时状态或时间冲突'
+  }
+}
+
+function openCreateLesson() {
+  showCreateLesson.value = true
+}
+
+function openLessonEdit(lesson: Lesson) {
+  selectedLesson.value = lesson
+}
+
+function openStudentCreate() {
+  studentFormMode.value = 'create'
+  editingStudent.value = null
+  showStudentForm.value = true
+}
+
+function openStudentEdit(studentId: number) {
+  const student = students.value.find((s) => s.id === studentId) ?? null
+  if (!student) return
+  studentFormMode.value = 'edit'
+  editingStudent.value = student
+  showStudentForm.value = true
+}
+
+function openTemplateCreate() {
+  templateFormMode.value = 'create'
+  editingTemplate.value = null
+  showTemplateForm.value = true
+}
+
+function openTemplateEdit(template: Template) {
+  templateFormMode.value = 'edit'
+  editingTemplate.value = template
+  showTemplateForm.value = true
+}
+
+function handleOpenReschedule() {
+  rescheduleTarget.value = selectedLesson.value
+  showRescheduleLesson.value = true
+}
+
+async function handleQuickComplete(lesson: Lesson) {
+  try {
+    await lessonsApi.update(lesson.id, { status: '已完成' })
+    await loadDashboard()
+  } catch { scheduleError.value = '操作失败' }
+}
+
+async function handleQuickRestore(lesson: Lesson) {
+  try {
+    await lessonsApi.restore(lesson.id)
+    await loadDashboard()
+  } catch { scheduleError.value = '操作失败' }
+}
+
+async function handleQuickCancel(lesson: Lesson) {
+  try {
+    await lessonsApi.cancel(lesson.id)
+    await loadDashboard()
+  } catch { scheduleError.value = '操作失败' }
+}
+
+function handleQuickReschedule(lesson: Lesson) {
+  selectedLesson.value = lesson
+  handleOpenReschedule()
+}
+
+async function handleQuickDelete(lesson: Lesson) {
+  if (!window.confirm('确定删除该课时？')) return
+  try {
+    await lessonsApi.remove(lesson.id)
+    await loadDashboard()
+  } catch { scheduleError.value = '删除失败' }
+}
+
+async function handleUpdateNote(payload: { lessonId: number; note: string | null }) {
+  try {
+    await lessonsApi.update(payload.lessonId, { note: payload.note })
+    await loadDashboard()
+  } catch { scheduleError.value = '备注保存失败' }
+}
+
+watch(selectedStudentId, async () => {
+  await loadTemplates()
+})
+
+watch(statRange, async () => {
+  statsOffset.value = 0
+  await loadDashboard()
+})
+
+watch(statsOffset, async () => {
+  await loadDashboard()
+})
+
+watch(weekOffset, async () => {
+  if (viewMode.value === 'week') await loadDashboard()
+})
+
+watch(
+  () => route.path,
+  (path) => {
+    activeTab.value = tabFromPath(path)
+  },
+  { immediate: true }
+)
+
+watch(quickCreate, (value) => {
+  if (value) {
+    showCreateLesson.value = true
+  }
+})
+
+onMounted(async () => {
+  await settingsStore.refresh()
+  await loadDashboard()
+  await loadTemplates()
+})
+</script>
+
+<template>
+  <AppShell :active-tab="activeTab" @change-tab="activeTab = $event">
+    <div v-if="loading" class="sticky top-0 z-20 h-0.5 w-full overflow-hidden rounded-full bg-[var(--accent)]/20">
+      <div class="animate-load h-full w-1/3 rounded-full bg-[var(--accent)]" />
+    </div>
+
+    <section v-if="activeTab === 'schedule'" class="space-y-4">
+      <div class="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-white/85 py-2 backdrop-blur-md dark:bg-gray-900/85">
+        <div class="flex items-center gap-2">
+          <button class="btn-ghost btn-sm !px-2" @click="viewMode === 'day' ? handlePrevDay() : viewMode === 'month' ? handlePrevMonth() : prevWeek()">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <button class="btn-ghost btn-sm !px-2" @click="goToToday">
+            <span class="text-xs font-semibold">今天</span>
+          </button>
+          <button class="btn-ghost btn-sm !px-2" @click="viewMode === 'day' ? handleNextDay() : viewMode === 'month' ? handleNextMonth() : nextWeek()">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </button>
+          <span v-if="viewMode === 'week'" class="text-xs font-semibold sm:text-sm">{{ weekRangeLabel }}</span>
+        </div>
+        <div class="flex items-center gap-1 sm:gap-1.5">
+          <div class="flex items-center rounded-xl bg-white/40 p-0.5 dark:bg-white/8">
+            <button
+              v-for="m in (['month', 'week', 'day'] as const)"
+              :key="m"
+              :class="['rounded-lg px-2.5 py-1 text-xs font-medium transition-colors sm:px-3', viewMode === m ? 'bg-[var(--accent)] text-white shadow-sm' : 'text-[var(--text-dim)] hover:text-[var(--text)]']"
+              @click="handleViewChange(m)"
+            >
+              {{ m === 'month' ? '月' : m === 'week' ? '周' : '日' }}
+            </button>
+          </div>
+          <button class="btn-ghost btn-sm !px-2.5 sm:!px-3" @click="openCreateLesson">+</button>
+          <button class="btn-primary btn-sm hidden sm:flex" @click="downloadMonthReport">导出 Excel</button>
+        </div>
+      </div>
+
+      <p v-if="scheduleError" class="rounded-2xl bg-red-500/10 px-4 py-2.5 text-sm text-red-600 dark:text-red-400">
+        {{ scheduleError }}
+      </p>
+
+      <div
+        v-if="bulkSelectedIds.length && viewMode === 'week'"
+        class="glass flex flex-wrap items-center justify-between gap-3 p-3"
+      >
+        <span class="text-sm font-medium text-[var(--text)]">已选 {{ bulkSelectedIds.length }} 节</span>
+        <div class="flex flex-wrap gap-1.5">
+          <button class="btn-ghost btn-sm" @click="runBulkAction('complete')">批量完成</button>
+          <button class="btn-ghost btn-sm" @click="runBulkAction('cancel')">批量请假</button>
+          <button class="btn-ghost btn-sm" @click="runBulkAction('restore')">批量恢复</button>
+          <button class="btn-danger btn-sm" @click="runBulkAction('delete')">批量删除</button>
+          <button class="btn-ghost btn-sm" @click="bulkSelectedIds = []">清空</button>
+        </div>
+      </div>
+
+      <MonthView
+        v-if="viewMode === 'month'"
+        :base-date="monthDate"
+        :currency-symbol="currencySymbol"
+        :refresh-key="refreshKey"
+        :students="students"
+        @day-click="handleDayClick"
+        @select-lesson="openLessonEdit"
+      />
+
+      <DayView
+        v-else-if="viewMode === 'day'"
+        :currency-symbol="currencySymbol"
+        :date-iso="selectedDay || toIsoDate(addDays(new Date(), weekOffset * 7))"
+        :refresh-key="refreshKey"
+        :students="students"
+        :visible-end="settingsStore.settings.visible_time_end"
+        :visible-start="settingsStore.settings.visible_time_start"
+        @create-at="quickCreate = $event"
+        @select-lesson="openLessonEdit"
+      />
+
+      <ScheduleBoard
+        v-else
+        :currency-symbol="currencySymbol"
+        :lessons="lessons"
+        :selected-lesson-ids="bulkSelectedIds"
+        :selected-lesson-id="selectedLesson?.id ?? null"
+        :visible-end="settingsStore.settings.visible_time_end"
+        :visible-start="settingsStore.settings.visible_time_start"
+        :week-start="currentWeekStart"
+        @create-at="quickCreate = $event"
+        @move-lesson="moveLesson"
+        @select-lesson="openLessonEdit"
+        @swipe-next="viewMode === 'week' ? nextWeek() : viewMode === 'month' ? handleNextMonth() : handleNextDay()"
+        @swipe-prev="viewMode === 'week' ? prevWeek() : viewMode === 'month' ? handlePrevMonth() : handlePrevDay()"
+        @complete-lesson="handleQuickComplete"
+        @restore-lesson="handleQuickRestore"
+        @cancel-lesson="handleQuickCancel"
+        @reschedule-lesson="handleQuickReschedule"
+        @delete-lesson="handleQuickDelete"
+        @toggle-bulk="toggleBulkLesson"
+        @update-note="handleUpdateNote"
+      />
+
+      <CreateLessonModal
+        v-if="showCreateLesson"
+        :currency-symbol="currencySymbol"
+        :default-duration="settingsStore.settings.default_duration_hours"
+        :quick-create="quickCreate"
+        :students="students"
+        @close="showCreateLesson = false; quickCreate = null"
+        @refresh="loadDashboard"
+      />
+
+      <LessonEditModal
+        v-if="selectedLesson"
+        :currency-symbol="currencySymbol"
+        :default-duration="settingsStore.settings.default_duration_hours"
+        :lesson="selectedLesson"
+        :students="students"
+        @close="selectedLesson = null"
+        @open-reschedule="handleOpenReschedule"
+        @refresh="loadDashboard"
+      />
+
+      <RescheduleLessonModal
+        v-if="showRescheduleLesson && rescheduleTarget"
+        :currency-symbol="currencySymbol"
+        :default-duration="settingsStore.settings.default_duration_hours"
+        :lesson="rescheduleTarget"
+        @close="showRescheduleLesson = false; rescheduleTarget = null"
+        @refresh="loadDashboard"
+      />
+
+      <RescheduleModeModal
+        :visible="showRescheduleMode"
+        @close="showRescheduleMode = false; pendingMovePayload = null"
+        @select="handleRescheduleMode"
+      />
+    </section>
+
+    <section v-else-if="activeTab === 'students'">
+      <div class="grid gap-4">
+        <StudentsPanel
+          :currency-symbol="currencySymbol"
+          :selected-student-id="selectedStudentId"
+          :students="students"
+          @refresh="loadDashboard"
+          @select-student="selectedStudentId = $event; openStudentEdit($event)"
+          @add-student="openStudentCreate"
+        />
+        <TemplateManager
+          :selected-student-id="selectedStudentId"
+          :students="students"
+          :templates="templates"
+          @refresh-templates="loadTemplates"
+          @edit-template="openTemplateEdit"
+          @add-template="openTemplateCreate"
+        />
+      </div>
+
+      <StudentFormModal
+        v-if="showStudentForm"
+        :currency-symbol="currencySymbol"
+        :mode="studentFormMode"
+        :student="editingStudent"
+        @close="showStudentForm = false"
+        @refresh="loadDashboard"
+      />
+
+      <TemplateFormModal
+        v-if="showTemplateForm"
+        :mode="templateFormMode"
+        :selected-student-id="selectedStudentId"
+        :students="students"
+        :template="editingTemplate"
+        @close="showTemplateForm = false"
+        @refresh-templates="loadTemplates"
+      />
+    </section>
+
+    <section v-else-if="activeTab === 'stats'">
+      <StatsPanel
+        :comparison="comparisonStats"
+        :currency-symbol="currencySymbol"
+        :is-current-period="isCurrentStatsPeriod"
+        :leave-items="leaveItems"
+        :range="rangeStats"
+        :ranking="ranking"
+        :stat-range="statRange"
+        :stats-offset="statsOffset"
+        :stats-period-label="statsPeriodLabel"
+        :today="todayStats"
+        @change-range="statRange = $event"
+        @export-range="downloadMonthReport"
+        @go-current-period="goToCurrentStatsPeriod"
+        @next-period="nextStatsPeriod"
+        @prev-period="prevStatsPeriod"
+      />
+    </section>
+
+    <section v-else>
+      <SettingsPanel />
+    </section>
+  </AppShell>
+</template>

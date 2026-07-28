@@ -1,0 +1,18 @@
+{
+  "name": "课表 - 课程管理",
+  "short_name": "课表",
+  "description": "高效的私人排课管理系统",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e8f0fe",
+  "theme_color": "#4c7dff",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "lang": "zh-CN"
+}

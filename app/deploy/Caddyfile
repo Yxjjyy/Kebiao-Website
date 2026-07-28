@@ -1,0 +1,33 @@
+xiaomei.me {
+	root * /home/kebiao/app/frontend/dist
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/kebiao-access.log
+	}
+}
+
+http://47.114.125.76 {
+	root * /home/kebiao/app/frontend/dist
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>羊羊teacher的class</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;background:#eef1f5;color:#1a1a2e;padding:24px}
+.container{max-width:1100px;margin:0 auto}
+h1{font-size:26px;color:#0d1b3e;display:flex;align-items:center;gap:10px}
+h1 small{font-size:13px;font-weight:400;color:#888}
+
+.weeks{display:flex;gap:6px;margin:16px 0;flex-wrap:wrap}
+.weeks button{padding:8px 18px;border:2px solid #d0d5dd;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;background:#fff;transition:.12s}
+.weeks button:hover{border-color:#e94560}
+.weeks button.on{background:#e94560;color:#fff;border-color:#e94560}
+.weeks button .sub{display:block;font-size:10px;font-weight:400;opacity:.6;margin-top:2px}
+
+.grid{display:grid;grid-template-columns:72px repeat(7,1fr);gap:4px;margin-top:8px;min-width:900px}
+.grid .hd{font-size:13px;font-weight:700;padding:10px 6px;text-align:center;background:#fff;border-radius:6px;color:#0d1b3e}
+.grid .hd .dt{font-weight:400;font-size:11px;color:#888;display:block;margin-top:2px}
+.grid .tl{font-size:12px;padding:6px;text-align:right;color:#555;align-self:start;margin-top:4px;white-space:nowrap}
+.slot{background:#fff;border-radius:6px;padding:5px 6px;margin:2px 0;font-size:12px;cursor:default;transition:.1s}
+.slot:hover{filter:brightness(.95)}
+.slot .t{font-size:10px;opacity:.8}
+.slot .nm{font-weight:600;font-size:13px}
+.slot .nt{font-size:10px;opacity:.7;margin-left:2px}
+.empty-slot{min-height:18px}
+
+.wrap{overflow-x:auto;background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 6px rgba(0,0,0,.05)}
+.legend{display:flex;gap:20px;flex-wrap:wrap;margin:16px 0 0;font-size:13px;padding:12px 16px;background:#fff;border-radius:10px}
+.legend .dot{width:12px;height:12px;border-radius:4px;display:inline-block;vertical-align:middle;margin-right:4px}
+.legend .grp{display:flex;align-items:center;gap:4px}
+
+@media(max-width:700px){
+  body{padding:12px}
+  .grid{grid-template-columns:60px repeat(7,1fr);min-width:auto}
+  .grid .hd{font-size:11px;padding:6px 3px}
+  .slot{font-size:11px;padding:3px 4px}
+  .slot .nm{font-size:11px}
+}
+</style>
+</head>
+<body>
+<div class=container>
+<h1>🐑 羊羊teacher的class <small>每节60′ · 课间5′ · 周五19:30–21:00空置</small></h1>
+
+<div class=weeks id=weeks></div>
+<div class=wrap><div class=grid id=grid></div></div>
+<div class=legend id=legend></div>
+</div>
+
+<script>
+const DAYS=['周一','周二','周三','周四','周五','周六','周日'];
+const C={
+  '男雅思':{bg:'#1565C0',fg:'#fff'},
+  '小鱼':{bg:'#00897B',fg:'#fff'},
+  '娜娜':{bg:'#E65100',fg:'#fff'},
+  '哥哥':{bg:'#EF6C00',fg:'#fff'},
+  '妹妹':{bg:'#C62828',fg:'#fff'},
+  '石头':{bg:'#4E342E',fg:'#fff'},
+  '姐姐':{bg:'#AD1457',fg:'#fff'},
+  '八月':{bg:'#283593',fg:'#fff'},
+  '空置':{bg:'#BDBDBD',fg:'#666'},
+};
+
+const WEEKS=[
+  {label:'第1周',sd:'5/11',ed:'5/17',type:'单周',ielts:'11:00-12:00',excludeMonIelts:true},
+  {label:'第2周',sd:'5/18',ed:'5/24',type:'双周',ielts:'13:00-14:00'},
+  {label:'第3周',sd:'5/25',ed:'5/31',type:'单周',ielts:'11:00-12:00'},
+  {label:'第4周',sd:'6/1',ed:'6/7',type:'双周',ielts:'13:00-14:00'},
+  {label:'第5周',sd:'6/8',ed:'6/10',type:'单周',ielts:'11:00-12:00'},
+];
+
+function dayToDate(m,d){
+  return new Date(2026,m-1,d);
+}
+
+const BASE={
+  Mon:[
+    {t:'17:00-18:00',s:'小鱼'},
+    {t:'18:05-19:05',s:'娜娜',n:'①'},
+    {t:'19:10-20:10',s:'哥哥'},
+    {t:'20:15-21:15',s:'石头'},
+    {t:'21:20-22:20',s:'八月'},
+  ],
+  Tue:[
+    {t:'18:05-19:05',s:'姐姐',n:'①'},
+    {t:'19:10-20:10',s:'妹妹'},
+    {t:'21:15-22:15',s:'八月'},
+  ],
+  Wed:[
+    {t:'18:05-19:05',s:'娜娜',n:'②'},
+    {t:'19:10-20:10',s:'哥哥'},
+    {t:'20:15-21:15',s:'石头'},
+    {t:'21:20-22:20',s:'八月'},
+  ],
+  Thu:[
+    {t:'17:00-18:00',s:'小鱼'},
+    {t:'18:05-19:05',s:'姐姐',n:'②'},
+    {t:'19:10-20:10',s:'妹妹'},
+    {t:'21:15-22:15',s:'八月'},
+  ],
+  Fri:[
+    {t:'18:15-19:15',s:'石头'},
+    {t:'19:30-21:00',s:'空置',n:'不排课'},
+    {t:'21:05-22:05',s:'八月'},
+  ],
+  Sat:[
+    {t:'14:00-15:00',s:'哥哥'},
+    {t:'15:05-16:05',s:'妹妹'},
+    {t:'17:00-18:00',s:'小鱼'},
+    {t:'18:05-19:05',s:'娜娜',n:'③'},
+    {t:'21:10-22:10',s:'八月'},
+  ],
+  Sun:[
+    {t:'21:00-22:00',s:'八月',n:'备用'},
+  ],
+};
+
+function getSlots(weekIdx,dayKey){
+  const w=WEEKS[weekIdx];
+  const slots=[...BASE[dayKey]];
+  const ieltsDayMap={Mon:0,Wed:0,Fri:0,Sun:0};
+  if(dayKey in ieltsDayMap){
+    const hasIelts=!(dayKey==='Mon' && w.excludeMonIelts);
+    if(hasIelts){
+      const [st,en]=w.ielts.split('-');
+      slots.unshift({t:w.ielts,s:'男雅思',n:w.type});
+    }
+  }
+  return slots;
+}
+
+function renderLegend(){
+  const keys=[...new Set(Object.keys(C))];
+  const div=document.getElementById('legend');
+  div.innerHTML=keys.map(k=>`<span class=grp><span class=dot style="background:${C[k].bg}"></span>${k}</span>`).join('');
+}
+
+function renderWeek(idx){
+  const w=WEEKS[idx];
+  const [sm,sd]=w.sd.split('/').map(Number);
+  const [em,ed]=w.ed.split('/').map(Number);
+  const start=dayToDate(sm,sd);
+  const end=dayToDate(em,ed);
+  const days=[];
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+    days.push({m:d.getMonth()+1,day:d.getDate(),dow:d.getDay()});
+  }
+  const grid=document.getElementById('grid');
+  const dayKeys=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const dayAbbr=['一','二','三','四','五','六','日'];
+
+  const allTimes=[];
+  days.forEach(d=>{
+    const dk=dayKeys[d.dow===0?6:d.dow-1];
+    getSlots(idx,dk).forEach(s=>{
+      const t=s.t.split('-')[0];
+      if(!allTimes.includes(t)) allTimes.push(t);
+    });
+  });
+  allTimes.sort();
+
+  let html='<div class=hd>时间</div>';
+  days.forEach((d,i)=>{
+    const abbr=dayAbbr[d.dow===0?6:d.dow-1];
+    html+=`<div class=hd>周${abbr}<span class=dt>${d.m}/${d.day}</span></div>`;
+  });
+
+  allTimes.forEach(tm=>{
+    html+=`<div class=tl>${tm}</div>`;
+    days.forEach(d=>{
+      const dk=dayKeys[d.dow===0?6:d.dow-1];
+      const slots=getSlots(idx,dk).filter(s=>s.t.startsWith(tm));
+      if(slots.length===0){
+        html+=`<div class="slot empty-slot"></div>`;
+      }else{
+        slots.forEach(s=>{
+          const clr=C[s.s]||{bg:'#888',fg:'#fff'};
+          html+=`<div class=slot style="background:${clr.bg};color:${clr.fg}">
+            <div class=t>${s.t}</div>
+            <div class=nm>${s.s}${s.n?`<span class=nt>${s.n}</span>`:''}</div>
+          </div>`;
+        });
+      }
+    });
+  });
+
+  grid.innerHTML=html;
+}
+
+function init(){
+  const container=document.getElementById('weeks');
+  WEEKS.forEach((w,i)=>{
+    const btn=document.createElement('button');
+    btn.innerHTML=`${w.label}<span class=sub>${w.sd}–${w.ed} ${w.type}</span>`;
+    btn.onclick=()=>{
+      document.querySelectorAll('.weeks button').forEach(b=>b.classList.remove('on'));
+      btn.classList.add('on');
+      renderWeek(i);
+    };
+    if(i===0) btn.classList.add('on');
+    container.appendChild(btn);
+  });
+  renderLegend();
+  renderWeek(0);
+}
+
+init();
+</script>
+</body>
+</html>

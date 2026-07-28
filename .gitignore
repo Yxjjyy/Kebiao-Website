@@ -1,0 +1,35 @@
+# Databases and backups
+*.db
+*.sqlite
+*.sqlite3
+data/
+backups/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!app/deploy/.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node / frontend build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Editors and operating systems
+.idea/
+.vscode/
+.superpowers/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
