@@ -13,10 +13,10 @@ const tabs = [
 
 <template>
   <nav
-    class="fixed bottom-0 left-0 right-0 z-30 glass-strong border-t border-white/40 dark:border-white/8 lg:hidden"
+    class="fixed bottom-2 left-3 right-3 z-50 rounded-[22px] border border-white/80 bg-white/80 shadow-[0_16px_40px_rgba(58,38,73,.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#211a2a]/90 lg:hidden"
     style="padding-bottom: env(safe-area-inset-bottom)"
   >
-    <div class="flex h-14 items-stretch">
+    <div class="flex h-[62px] items-stretch px-1">
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -26,9 +26,14 @@ const tabs = [
         ]"
         @click="emit('select', tab.id)"
       >
-        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" :stroke-width="activeTab === tab.id ? 2 : 1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path :d="tab.icon" />
-        </svg>
+        <span
+          :class="['grid h-8 w-9 place-items-center rounded-xl transition-all', activeTab === tab.id ? 'text-white shadow-[0_6px_14px_rgba(139,57,181,.22)]' : '']"
+          :style="activeTab === tab.id ? { background: 'var(--accent-gradient)' } : undefined"
+        >
+          <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" :stroke-width="activeTab === tab.id ? 2 : 1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path :d="tab.icon" />
+          </svg>
+        </span>
         <span class="text-[10px] font-medium">{{ tab.label }}</span>
       </button>
     </div>

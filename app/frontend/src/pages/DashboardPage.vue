@@ -7,9 +7,12 @@ import CreateLessonModal from '@/components/schedule/CreateLessonModal.vue'
 import DayView from '@/components/schedule/DayView.vue'
 import LessonEditModal from '@/components/schedule/LessonEditModal.vue'
 import MonthView from '@/components/schedule/MonthView.vue'
+import MobileLessonActionsSheet from '@/components/schedule/MobileLessonActionsSheet.vue'
 import RescheduleLessonModal from '@/components/schedule/RescheduleLessonModal.vue'
 import RescheduleModeModal from '@/components/schedule/RescheduleModeModal.vue'
 import ScheduleBoard from '@/components/schedule/ScheduleBoard.vue'
+import ScheduleDashboardHeader from '@/components/schedule/ScheduleDashboardHeader.vue'
+import ScheduleOverview from '@/components/schedule/ScheduleOverview.vue'
 import StatsPanel from '@/components/stats/StatsPanel.vue'
 import TemplateManager from '@/components/students/TemplateManager.vue'
 import StudentsPanel from '@/components/students/StudentsPanel.vue'
@@ -71,6 +74,7 @@ const showRescheduleMode = ref(false)
 const pendingMovePayload = ref<{ lesson: Lesson; date: string; start_time: string } | null>(null)
 const showRescheduleLesson = ref(false)
 const rescheduleTarget = ref<Lesson | null>(null)
+const mobileActionLesson = ref<Lesson | null>(null)
 
 const currentWeekStart = computed(() => addDays(new Date(), weekOffset.value * 7))
 
@@ -80,6 +84,11 @@ const weekRangeLabel = computed(() => {
 })
 
 const currencySymbol = computed(() => settingsStore.settings.currency_symbol)
+const displayName = computed(() => settingsStore.profile.display_name || '教师')
+const avatarColor = computed(() => settingsStore.profile.avatar_color || '#7c3aed')
+const todayLessons = computed(() =>
+  todayStats.value?.lessons ?? lessons.value.filter((lesson) => lesson.date === toIsoDate(new Date()))
+)
 const statRangeLabel = computed(() =>
   statRange.value === 'today' ? '今日' : statRange.value === 'week' ? '本周' : '本月'
 )
@@ -157,6 +166,7 @@ function getStatsRange(offset = 0) {
 
 async function loadDashboard() {
   loading.value = true
+  scheduleError.value = ''
   try {
     const week = getWeekRange(currentWeekStart.value, (settingsStore.settings.week_start as 0 | 1) ?? 1)
     const statsRange = getStatsRange(statsOffset.value)
@@ -180,6 +190,8 @@ async function loadDashboard() {
       selectedStudentId.value = studentRows[0].id
     }
     refreshKey.value++
+  } catch {
+    scheduleError.value = '数据加载失败，请检查网络后重试'
   } finally {
     loading.value = false
   }
@@ -302,6 +314,7 @@ function handleOpenReschedule() {
 async function handleQuickComplete(lesson: Lesson) {
   try {
     await lessonsApi.update(lesson.id, { status: '已完成' })
+    mobileActionLesson.value = null
     await loadDashboard()
   } catch { scheduleError.value = '操作失败' }
 }
@@ -309,6 +322,7 @@ async function handleQuickComplete(lesson: Lesson) {
 async function handleQuickRestore(lesson: Lesson) {
   try {
     await lessonsApi.restore(lesson.id)
+    mobileActionLesson.value = null
     await loadDashboard()
   } catch { scheduleError.value = '操作失败' }
 }
@@ -316,11 +330,13 @@ async function handleQuickRestore(lesson: Lesson) {
 async function handleQuickCancel(lesson: Lesson) {
   try {
     await lessonsApi.cancel(lesson.id)
+    mobileActionLesson.value = null
     await loadDashboard()
   } catch { scheduleError.value = '操作失败' }
 }
 
 function handleQuickReschedule(lesson: Lesson) {
+  mobileActionLesson.value = null
   selectedLesson.value = lesson
   handleOpenReschedule()
 }
@@ -329,8 +345,14 @@ async function handleQuickDelete(lesson: Lesson) {
   if (!window.confirm('确定删除该课时？')) return
   try {
     await lessonsApi.remove(lesson.id)
+    mobileActionLesson.value = null
     await loadDashboard()
   } catch { scheduleError.value = '删除失败' }
+}
+
+function handleMobileEdit(lesson: Lesson) {
+  mobileActionLesson.value = null
+  openLessonEdit(lesson)
 }
 
 async function handleUpdateNote(payload: { lessonId: number; note: string | null }) {
@@ -379,13 +401,24 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppShell :active-tab="activeTab" @change-tab="activeTab = $event">
+  <AppShell
+    :active-tab="activeTab"
+    :completed-count="comparisonStats?.current_lessons ?? 0"
+    @change-tab="activeTab = $event"
+  >
     <div v-if="loading" class="sticky top-0 z-20 h-0.5 w-full overflow-hidden rounded-full bg-[var(--accent)]/20">
       <div class="animate-load h-full w-1/3 rounded-full bg-[var(--accent)]" />
     </div>
 
     <section v-if="activeTab === 'schedule'" class="space-y-4">
-      <div class="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-white/85 py-2 backdrop-blur-md dark:bg-gray-900/85">
+      <ScheduleDashboardHeader
+        :avatar-color="avatarColor"
+        :display-name="displayName"
+        :today-lessons="todayLessons"
+        @create="openCreateLesson"
+      />
+
+      <div class="glass-strong sticky top-2 z-30 flex flex-wrap items-center justify-between gap-3 !rounded-2xl px-2.5 py-2">
         <div class="flex items-center gap-2">
           <button class="btn-ghost btn-sm !px-2" @click="viewMode === 'day' ? handlePrevDay() : viewMode === 'month' ? handlePrevMonth() : prevWeek()">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
@@ -409,7 +442,7 @@ onMounted(async () => {
               {{ m === 'month' ? '月' : m === 'week' ? '周' : '日' }}
             </button>
           </div>
-          <button class="btn-ghost btn-sm !px-2.5 sm:!px-3" @click="openCreateLesson">+</button>
+          <button class="btn-ghost btn-sm hidden !px-2.5 lg:inline-flex" @click="openCreateLesson">+</button>
           <button class="btn-primary btn-sm hidden sm:flex" @click="downloadMonthReport">导出 Excel</button>
         </div>
       </div>
@@ -432,49 +465,81 @@ onMounted(async () => {
         </div>
       </div>
 
-      <MonthView
-        v-if="viewMode === 'month'"
-        :base-date="monthDate"
-        :currency-symbol="currencySymbol"
-        :refresh-key="refreshKey"
-        :students="students"
-        @day-click="handleDayClick"
-        @select-lesson="openLessonEdit"
-      />
+      <div :class="viewMode === 'week' ? 'xl:grid xl:grid-cols-[minmax(0,1fr)_230px] xl:items-start xl:gap-4' : ''">
+        <div class="min-w-0">
+          <MonthView
+            v-if="viewMode === 'month'"
+            :base-date="monthDate"
+            :currency-symbol="currencySymbol"
+            :refresh-key="refreshKey"
+            :students="students"
+            @day-click="handleDayClick"
+            @select-lesson="openLessonEdit"
+          />
 
-      <DayView
-        v-else-if="viewMode === 'day'"
-        :currency-symbol="currencySymbol"
-        :date-iso="selectedDay || toIsoDate(addDays(new Date(), weekOffset * 7))"
-        :refresh-key="refreshKey"
-        :students="students"
-        :visible-end="settingsStore.settings.visible_time_end"
-        :visible-start="settingsStore.settings.visible_time_start"
-        @create-at="quickCreate = $event"
-        @select-lesson="openLessonEdit"
-      />
+          <DayView
+            v-else-if="viewMode === 'day'"
+            :currency-symbol="currencySymbol"
+            :date-iso="selectedDay || toIsoDate(addDays(new Date(), weekOffset * 7))"
+            :refresh-key="refreshKey"
+            :students="students"
+            :visible-end="settingsStore.settings.visible_time_end"
+            :visible-start="settingsStore.settings.visible_time_start"
+            @create-at="quickCreate = $event"
+            @select-lesson="openLessonEdit"
+          />
 
-      <ScheduleBoard
-        v-else
+          <ScheduleBoard
+            v-else
+            :currency-symbol="currencySymbol"
+            :lessons="lessons"
+            :selected-lesson-ids="bulkSelectedIds"
+            :selected-lesson-id="selectedLesson?.id ?? null"
+            :visible-end="settingsStore.settings.visible_time_end"
+            :visible-start="settingsStore.settings.visible_time_start"
+            :week-start="currentWeekStart"
+            @create-at="quickCreate = $event"
+            @move-lesson="moveLesson"
+            @select-lesson="openLessonEdit"
+            @open-mobile-actions="mobileActionLesson = $event"
+            @swipe-next="viewMode === 'week' ? nextWeek() : viewMode === 'month' ? handleNextMonth() : handleNextDay()"
+            @swipe-prev="viewMode === 'week' ? prevWeek() : viewMode === 'month' ? handlePrevMonth() : handlePrevDay()"
+            @complete-lesson="handleQuickComplete"
+            @restore-lesson="handleQuickRestore"
+            @cancel-lesson="handleQuickCancel"
+            @reschedule-lesson="handleQuickReschedule"
+            @delete-lesson="handleQuickDelete"
+            @toggle-bulk="toggleBulkLesson"
+            @update-note="handleUpdateNote"
+          />
+        </div>
+
+        <ScheduleOverview
+          v-if="viewMode === 'week'"
+          :active-student-count="students.length"
+          :today-lessons="todayLessons"
+        />
+      </div>
+
+      <button
+        class="fab-create fixed bottom-20 right-4 z-40 grid h-14 w-14 place-items-center rounded-[20px] text-2xl text-white shadow-[0_16px_32px_rgba(139,57,181,0.32)] lg:hidden"
+        style="background: var(--accent-gradient)"
+        aria-label="新建课程"
+        @click="openCreateLesson"
+      >
+        +
+      </button>
+
+      <MobileLessonActionsSheet
         :currency-symbol="currencySymbol"
-        :lessons="lessons"
-        :selected-lesson-ids="bulkSelectedIds"
-        :selected-lesson-id="selectedLesson?.id ?? null"
-        :visible-end="settingsStore.settings.visible_time_end"
-        :visible-start="settingsStore.settings.visible_time_start"
-        :week-start="currentWeekStart"
-        @create-at="quickCreate = $event"
-        @move-lesson="moveLesson"
-        @select-lesson="openLessonEdit"
-        @swipe-next="viewMode === 'week' ? nextWeek() : viewMode === 'month' ? handleNextMonth() : handleNextDay()"
-        @swipe-prev="viewMode === 'week' ? prevWeek() : viewMode === 'month' ? handlePrevMonth() : handlePrevDay()"
-        @complete-lesson="handleQuickComplete"
-        @restore-lesson="handleQuickRestore"
-        @cancel-lesson="handleQuickCancel"
-        @reschedule-lesson="handleQuickReschedule"
-        @delete-lesson="handleQuickDelete"
-        @toggle-bulk="toggleBulkLesson"
-        @update-note="handleUpdateNote"
+        :lesson="mobileActionLesson"
+        @cancel="handleQuickCancel"
+        @close="mobileActionLesson = null"
+        @complete="handleQuickComplete"
+        @delete="handleQuickDelete"
+        @edit="handleMobileEdit"
+        @reschedule="handleQuickReschedule"
+        @restore="handleQuickRestore"
       />
 
       <CreateLessonModal

@@ -3,8 +3,8 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { Lesson } from '@/api/types'
 import { formatHourMinute, formatShortDate, formatWeekday, getWeekDays, isToday, toIsoDate } from '@/lib/date'
 import { formatCurrency, formatHours } from '@/lib/format'
+import { resolveSelectedDate } from '@/lib/scheduleDashboard'
 import { useSettingsStore } from '@/stores/settings'
-import { downloadICS } from '@/composables/useCalendar'
 
 const settingsStore = useSettingsStore()
 
@@ -31,6 +31,7 @@ const emit = defineEmits<{
   (e: 'reschedule-lesson', lesson: Lesson): void
   (e: 'delete-lesson', lesson: Lesson): void
   (e: 'update-note', payload: { lessonId: number; note: string | null }): void
+  (e: 'open-mobile-actions', lesson: Lesson): void
 }>()
 
 const draggingLessonId = ref<number | null>(null)
@@ -38,9 +39,9 @@ const dragOverSlotKey = ref<string | null>(null)
 const dragOverConflict = ref(false)
 const showUndo = ref(false)
 const undoInfo = ref('')
-const collapsedDays = ref<Set<string>>(new Set())
 const editingNoteId = ref<number | null>(null)
 const editingNoteValue = ref('')
+const selectedMobileDate = ref('')
 
 function startEditNote(lesson: Lesson) {
   editingNoteId.value = lesson.id
@@ -63,12 +64,6 @@ function cancelEditNote() {
   editingNoteValue.value = ''
 }
 
-function toggleDay(iso: string) {
-  const next = new Set(collapsedDays.value)
-  if (next.has(iso)) next.delete(iso); else next.add(iso)
-  collapsedDays.value = next
-}
-
 const occupiedSlots = computed(() => {
   const set = new Set<string>()
   for (const lesson of props.lessons) set.add(`${lesson.date}-${lesson.start_time}`)
@@ -87,14 +82,19 @@ const weekdays = computed(() =>
 watch(
   () => weekdays.value.map((d) => d.iso),
   (isos) => {
-    const todayIso = toIsoDate(new Date())
-    collapsedDays.value = new Set(isos.filter((iso) => iso < todayIso))
+    selectedMobileDate.value = resolveSelectedDate(isos, toIsoDate(new Date()))
   },
   { immediate: true }
 )
 
 const grouped = computed(() =>
   weekdays.value.map((day) => ({ ...day, lessons: props.lessons.filter((l) => l.date === day.iso).sort((a, b) => a.start_time.localeCompare(b.start_time)) }))
+)
+const selectedMobileDay = computed(() =>
+  grouped.value.find((day) => day.iso === selectedMobileDate.value) ?? grouped.value[0]
+)
+const mobileCompletedCount = computed(() =>
+  selectedMobileDay.value?.lessons.filter((lesson) => lesson.status === '已完成').length ?? 0
 )
 
 const startHour = computed(() => Number(props.visibleStart.slice(0, 2)))
@@ -254,50 +254,68 @@ function isEvenHour(slot: string) { return slot.endsWith(':00') && Number(slot.s
       </article>
     </div>
 
-    <!-- Mobile -->
-    <div class="grid gap-2.5 lg:hidden">
-      <article v-for="day in grouped" :key="day.iso" class="glass rounded-2xl p-3">
-        <div class="flex cursor-pointer items-center justify-between" @click="toggleDay(day.iso)">
-          <div class="flex items-center gap-2">
-            <svg class="h-4 w-4 text-[var(--text-dim)] transition-transform duration-200" :class="collapsedDays.has(day.iso) ? '' : 'rotate-90'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-            <p class="text-sm font-semibold">{{ day.label }} {{ day.sublabel }}</p>
-            <span class="h-2 w-2 rounded-full" :class="day.today ? 'bg-[var(--accent)] shadow-[0_0_0_5px_rgba(76,125,255,0.18)]' : 'bg-white/50 dark:bg-white/20'" />
-          </div>
-          <div class="flex items-center gap-2">
-            <span v-if="day.lessons.length" class="text-[11px] text-[var(--text-dim)]">{{ day.lessons.length }}节</span>
-            <span v-if="day.today" class="text-[10px] text-[var(--accent)] font-medium">今天</span>
-          </div>
+    <!-- Mobile: single-day agenda -->
+    <div class="lg:hidden">
+      <div class="mb-3 flex items-end justify-between px-1">
+        <div>
+          <p class="text-sm font-bold">本周安排</p>
+          <p class="mt-0.5 text-[11px] text-[var(--text-dim)]">{{ grouped[0]?.sublabel }} — {{ grouped[6]?.sublabel }}</p>
         </div>
+        <p class="text-[11px] font-medium text-[var(--text-dim)]">
+          {{ mobileCompletedCount }} / {{ selectedMobileDay?.lessons.length ?? 0 }} 已完成
+        </p>
+      </div>
 
-        <div v-if="!collapsedDays.has(day.iso)" class="mt-3 space-y-2">
-          <div v-for="lesson in day.lessons" :key="lesson.id" :class="['cursor-pointer rounded-xl border px-3 py-3 transition-all min-h-[56px]', lesson.id === selectedLessonId ? 'border-[var(--accent)] ring-2 ring-[var(--accent)]/20' : 'border-white/40 dark:border-white/10 active:bg-white/40']" :style="lessonBg(lesson)" @click="emit('select-lesson', lesson)">
-            <div class="flex items-center justify-between gap-2">
-              <div class="min-w-0">
-                <p class="truncate text-sm font-semibold">{{ lesson.student?.name ?? `学生 #${lesson.student_id}` }}</p>
-                <p class="mt-0.5 text-xs text-[var(--text-dim)]">{{ formatHourMinute(lesson.start_time) }} · {{ formatHours(lesson.duration_hours) }}</p>
-              </div>
-              <span :class="['badge text-[11px]', statusClass(lesson.status)]">{{ lesson.status }}</span>
-            </div>
-            <div class="mt-2.5 flex items-center justify-between text-xs text-[var(--text-dim)]">
-              <span class="font-medium">{{ formatCurrency(lesson.price, currencySymbol) }}</span>
-              <span v-if="editingNoteId === lesson.id" class="ml-2 flex-1" @click.stop>
-                <input :data-note-input="lesson.id" v-model="editingNoteValue" class="w-full bg-transparent border-b border-dashed border-[var(--accent)] outline-none text-xs text-right" @keydown.enter.stop="saveNote(lesson.id)" @keydown.escape.stop="cancelEditNote()" @blur="saveNote(lesson.id)" />
-              </span>
-              <span v-else class="truncate ml-2 cursor-pointer hover:text-[var(--accent)]" @click.stop="startEditNote(lesson)">{{ lesson.note || '添加备注' }}</span>
-            </div>
-            <!-- Mobile action buttons -->
-            <div class="mt-2.5 flex flex-wrap gap-1.5 border-t border-white/20 pt-2.5 dark:border-white/6" @click.stop>
-              <button v-if="lesson.status === '待上'" class="btn-ghost btn-sm !py-1 !px-2 !text-[11px]" @click="emit('complete-lesson', lesson)">完成</button>
-              <button v-if="lesson.status !== '待上'" class="btn-ghost btn-sm !py-1 !px-2 !text-[11px]" @click="emit('restore-lesson', lesson)">恢复待上</button>
-              <button v-if="lesson.status === '待上'" class="btn-ghost btn-sm !py-1 !px-2 !text-[11px]" @click="emit('cancel-lesson', lesson)">请假</button>
-              <button v-if="lesson.status === '待上'" class="btn-ghost btn-sm !py-1 !px-2 !text-[11px]" @click="emit('reschedule-lesson', lesson)">调课</button>
-              <button class="btn-ghost btn-sm !py-1 !px-2 !text-[11px]" @click="downloadICS(lesson, lesson.student?.name ?? '课程')">📅</button>
-              <button class="btn-danger btn-sm !py-1 !px-2 !text-[11px]" @click="emit('delete-lesson', lesson)">删除</button>
-            </div>
-          </div>
-          <div v-if="!day.lessons.length" class="rounded-xl border border-dashed border-white/30 px-3 py-5 text-center text-xs text-[var(--text-dim)] dark:border-white/8">暂无课程</div>
+      <div class="mb-4 grid grid-cols-7 gap-1.5" aria-label="选择日期">
+        <button
+          v-for="day in grouped"
+          :key="day.iso"
+          data-testid="mobile-date-option"
+          :data-date="day.iso"
+          :aria-pressed="selectedMobileDate === day.iso"
+          :class="[
+            'relative flex min-h-[58px] flex-col items-center justify-center rounded-2xl text-[11px] font-semibold transition-all duration-200',
+            selectedMobileDate === day.iso
+              ? 'text-white shadow-[0_9px_20px_rgba(141,62,188,0.22)]'
+              : 'bg-white/55 text-[var(--text-dim)] dark:bg-white/[0.07]',
+          ]"
+          :style="selectedMobileDate === day.iso ? { background: 'var(--accent-gradient)' } : undefined"
+          @click="selectedMobileDate = day.iso"
+        >
+          <span>{{ day.label.replace('星期', '') }}</span>
+          <b class="mt-0.5 text-sm">{{ Number(day.iso.slice(-2)) }}</b>
+          <i v-if="day.today && selectedMobileDate !== day.iso" class="absolute bottom-1 h-1 w-1 rounded-full bg-[var(--accent)]" />
+        </button>
+      </div>
+
+      <div data-testid="mobile-course-list" class="space-y-2.5">
+        <button
+          v-for="lesson in selectedMobileDay?.lessons ?? []"
+          :key="lesson.id"
+          data-testid="mobile-course-card"
+          class="mobile-course-card group w-full text-left"
+          @click="emit('open-mobile-actions', lesson)"
+        >
+          <span class="w-12 shrink-0 text-sm font-bold tracking-tight">{{ formatHourMinute(lesson.start_time) }}</span>
+          <span class="h-11 w-1 shrink-0 rounded-full" :style="{ background: `linear-gradient(180deg, ${lesson.student?.color ?? '#7c3aed'}, #ec4899)` }" />
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-bold">{{ lesson.student?.name ?? `学生 #${lesson.student_id}` }}</span>
+            <span class="mt-1 block truncate text-[11px] text-[var(--text-dim)]">
+              {{ formatHours(lesson.duration_hours) }} · {{ lesson.note || formatCurrency(lesson.price, currencySymbol) }}
+            </span>
+          </span>
+          <span :class="['badge shrink-0 text-[10px]', statusClass(lesson.status)]">{{ lesson.status }}</span>
+          <svg class="h-4 w-4 shrink-0 text-[#b8adbf] transition-transform group-active:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="m9 18 6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+
+        <div v-if="!selectedMobileDay?.lessons.length" class="glass flex min-h-32 flex-col items-center justify-center px-5 text-center">
+          <span class="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--accent-soft)] text-xl text-[var(--accent)]">◇</span>
+          <p class="mt-3 text-sm font-semibold">今天没有课程</p>
+          <p class="mt-1 text-xs text-[var(--text-dim)]">留一点时间给自己，或新建一节临时课。</p>
         </div>
-      </article>
+      </div>
     </div>
 
     <div v-if="showUndo" class="glass fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-2xl px-4 py-2.5 text-sm shadow-lg lg:bottom-6">
