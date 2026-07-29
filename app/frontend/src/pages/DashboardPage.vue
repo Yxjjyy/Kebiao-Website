@@ -14,6 +14,7 @@ import ScheduleBoard from '@/components/schedule/ScheduleBoard.vue'
 import ScheduleDashboardHeader from '@/components/schedule/ScheduleDashboardHeader.vue'
 import ScheduleOverview from '@/components/schedule/ScheduleOverview.vue'
 import StatsPanel from '@/components/stats/StatsPanel.vue'
+import StudentOverview from '@/components/students/StudentOverview.vue'
 import TemplateManager from '@/components/students/TemplateManager.vue'
 import StudentsPanel from '@/components/students/StudentsPanel.vue'
 import StudentFormModal from '@/components/students/StudentFormModal.vue'
@@ -29,12 +30,14 @@ import type {
   Lesson,
   RangeStats,
   Student,
+  StudentDetail,
   StudentStatsRow,
   Template,
   TodayStats,
 } from '@/api/types'
 import { addDays, format } from 'date-fns'
 import { getOffsetMonthRange, getOffsetWeekRange, getWeekRange, toIsoDate } from '@/lib/date'
+import { normalizeSelectedStudentId } from '@/lib/studentWorkspace'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -49,6 +52,11 @@ const rangeStats = ref<RangeStats | null>(null)
 const comparisonStats = ref<ComparisonStats | null>(null)
 const ranking = ref<StudentStatsRow[]>([])
 const templates = ref<Template[]>([])
+const selectedStudentDetail = ref<StudentDetail | null>(null)
+const studentDetailLoading = ref(false)
+const studentDetailError = ref('')
+const templatesLoading = ref(false)
+const templatesError = ref('')
 const selectedLesson = ref<Lesson | null>(null)
 const selectedStudentId = ref<number | null>(null)
 const statRange = ref<'today' | 'week' | 'month'>('month')
@@ -186,9 +194,7 @@ async function loadDashboard() {
     comparisonStats.value = comparison
     ranking.value = studentRanking
     leaveItems.value = leaveRows
-    if (!selectedStudentId.value && studentRows.length) {
-      selectedStudentId.value = studentRows[0].id
-    }
+    selectedStudentId.value = normalizeSelectedStudentId(studentRows, selectedStudentId.value)
     refreshKey.value++
   } catch {
     scheduleError.value = '数据加载失败，请检查网络后重试'
@@ -197,12 +203,67 @@ async function loadDashboard() {
   }
 }
 
+async function loadStudentDetail() {
+  if (!selectedStudentId.value) {
+    selectedStudentDetail.value = null
+    studentDetailError.value = ''
+    studentDetailLoading.value = false
+    return
+  }
+  const studentId = selectedStudentId.value
+  studentDetailLoading.value = true
+  studentDetailError.value = ''
+  try {
+    const detail = await studentsApi.get(studentId)
+    if (selectedStudentId.value === studentId) {
+      selectedStudentDetail.value = detail
+    }
+  } catch {
+    if (selectedStudentId.value === studentId) {
+      selectedStudentDetail.value = null
+      studentDetailError.value = '学生详情加载失败'
+    }
+  } finally {
+    if (selectedStudentId.value === studentId) {
+      studentDetailLoading.value = false
+    }
+  }
+}
+
 async function loadTemplates() {
   if (!selectedStudentId.value) {
     templates.value = []
+    templatesError.value = ''
+    templatesLoading.value = false
     return
   }
-  templates.value = await templatesApi.list(selectedStudentId.value)
+  const studentId = selectedStudentId.value
+  templatesLoading.value = true
+  templatesError.value = ''
+  try {
+    const rows = await templatesApi.list(studentId)
+    if (selectedStudentId.value === studentId) {
+      templates.value = rows
+    }
+  } catch {
+    if (selectedStudentId.value === studentId) {
+      templates.value = []
+      templatesError.value = '模板加载失败'
+    }
+  } finally {
+    if (selectedStudentId.value === studentId) {
+      templatesLoading.value = false
+    }
+  }
+}
+
+async function loadStudentWorkspace() {
+  await Promise.all([loadStudentDetail(), loadTemplates()])
+}
+
+async function refreshStudentWorkspace() {
+  await loadDashboard()
+  await loadStudentWorkspace()
 }
 
 async function downloadMonthReport() {
@@ -363,7 +424,7 @@ async function handleUpdateNote(payload: { lessonId: number; note: string | null
 }
 
 watch(selectedStudentId, async () => {
-  await loadTemplates()
+  await loadStudentWorkspace()
 })
 
 watch(statRange, async () => {
@@ -396,7 +457,6 @@ watch(quickCreate, (value) => {
 onMounted(async () => {
   await settingsStore.refresh()
   await loadDashboard()
-  await loadTemplates()
 })
 </script>
 
@@ -579,24 +639,36 @@ onMounted(async () => {
       />
     </section>
 
-    <section v-else-if="activeTab === 'students'">
-      <div class="grid gap-4">
+    <section v-else-if="activeTab === 'students'" class="pb-4">
+      <div class="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">
         <StudentsPanel
           :currency-symbol="currencySymbol"
           :selected-student-id="selectedStudentId"
           :students="students"
-          @refresh="loadDashboard"
-          @select-student="selectedStudentId = $event; openStudentEdit($event)"
+          @select-student="selectedStudentId = $event"
+          @edit-student="openStudentEdit"
           @add-student="openStudentCreate"
         />
-        <TemplateManager
-          :selected-student-id="selectedStudentId"
-          :students="students"
-          :templates="templates"
-          @refresh-templates="loadTemplates"
-          @edit-template="openTemplateEdit"
-          @add-template="openTemplateCreate"
-        />
+        <div class="min-w-0 space-y-4">
+          <StudentOverview
+            :currency-symbol="currencySymbol"
+            :error="studentDetailError"
+            :loading="studentDetailLoading"
+            :student="selectedStudentDetail"
+            @edit-student="openStudentEdit"
+            @retry="loadStudentDetail"
+          />
+          <TemplateManager
+            :error="templatesError"
+            :loading="templatesLoading"
+            :selected-student-id="selectedStudentId"
+            :students="students"
+            :templates="templates"
+            @retry="loadTemplates"
+            @edit-template="openTemplateEdit"
+            @add-template="openTemplateCreate"
+          />
+        </div>
       </div>
 
       <StudentFormModal
@@ -605,7 +677,7 @@ onMounted(async () => {
         :mode="studentFormMode"
         :student="editingStudent"
         @close="showStudentForm = false"
-        @refresh="loadDashboard"
+        @refresh="refreshStudentWorkspace"
       />
 
       <TemplateFormModal
@@ -615,7 +687,7 @@ onMounted(async () => {
         :students="students"
         :template="editingTemplate"
         @close="showTemplateForm = false"
-        @refresh-templates="loadTemplates"
+        @refresh-templates="loadStudentWorkspace"
       />
     </section>
 

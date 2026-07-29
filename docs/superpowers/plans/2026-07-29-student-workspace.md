@@ -16,7 +16,7 @@
 - Create: `app/frontend/src/lib/studentWorkspace.ts`
 - Create: `app/frontend/src/lib/studentWorkspace.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 覆盖：
 
@@ -31,7 +31,7 @@ formatRepeatInterval(2)
 formatRepeatInterval(4)
 ```
 
-- [ ] **Step 2: 运行测试确认模块不存在**
+- [x] **Step 2: 运行测试确认模块不存在**
 
 ```powershell
 npm test -- src/lib/studentWorkspace.test.ts
@@ -39,7 +39,7 @@ npm test -- src/lib/studentWorkspace.test.ts
 
 预期：FAIL，无法解析 `studentWorkspace`。
 
-- [ ] **Step 3: 实现纯函数**
+- [x] **Step 3: 实现纯函数**
 
 导出：
 
@@ -50,7 +50,7 @@ sortTemplates(templates: Template[]): Template[]
 formatRepeatInterval(interval?: number): string
 ```
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 预期：全部 PASS。
 
@@ -60,7 +60,7 @@ formatRepeatInterval(interval?: number): string
 - Modify: `app/frontend/src/components/students/StudentsPanel.vue`
 - Create: `app/frontend/src/components/students/StudentsPanel.test.ts`
 
-- [ ] **Step 1: 写失败组件测试**
+- [x] **Step 1: 写失败组件测试**
 
 验证：
 
@@ -72,13 +72,13 @@ formatRepeatInterval(interval?: number): string
 无匹配结果显示空状态
 ```
 
-- [ ] **Step 2: 运行测试确认当前行为不符合**
+- [x] **Step 2: 运行测试确认当前行为不符合**
 
 ```powershell
 npm test -- src/components/students/StudentsPanel.test.ts
 ```
 
-- [ ] **Step 3: 实现目录组件**
+- [x] **Step 3: 实现目录组件**
 
 新增事件：
 
@@ -88,7 +88,7 @@ npm test -- src/components/students/StudentsPanel.test.ts
 
 学生卡使用按钮语义和 `aria-current`，编辑按钮阻止冒泡。
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 预期：全部 PASS。
 
@@ -98,7 +98,7 @@ npm test -- src/components/students/StudentsPanel.test.ts
 - Create: `app/frontend/src/components/students/StudentOverview.vue`
 - Create: `app/frontend/src/components/students/StudentOverview.test.ts`
 
-- [ ] **Step 1: 写失败组件测试**
+- [x] **Step 1: 写失败组件测试**
 
 验证：
 
@@ -110,9 +110,9 @@ npm test -- src/components/students/StudentsPanel.test.ts
 点击编辑发出 edit-student
 ```
 
-- [ ] **Step 2: 运行测试确认组件不存在**
+- [x] **Step 2: 运行测试确认组件不存在**
 
-- [ ] **Step 3: 实现详情组件**
+- [x] **Step 3: 实现详情组件**
 
 Props：
 
@@ -130,7 +130,7 @@ edit-student(studentId)
 retry
 ```
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 预期：全部 PASS。
 
@@ -140,13 +140,13 @@ retry
 - Modify: `app/frontend/src/components/students/TemplateManager.vue`
 - Create: `app/frontend/src/components/students/TemplateManager.test.ts`
 
-- [ ] **Step 1: 写失败组件测试**
+- [x] **Step 1: 写失败组件测试**
 
 验证模板排序、重复周期、生效范围、空状态、新增和重试事件。
 
-- [ ] **Step 2: 运行测试确认新展示行为失败**
+- [x] **Step 2: 运行测试确认新展示行为失败**
 
-- [ ] **Step 3: 实现模板组件**
+- [x] **Step 3: 实现模板组件**
 
 新增 Props：
 
@@ -163,7 +163,7 @@ error?: string
 
 新增模板按钮在没有选中学生时禁用。
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 预期：全部 PASS。
 
@@ -173,7 +173,7 @@ error?: string
 - Modify: `app/frontend/src/pages/DashboardPage.vue`
 - Modify: `app/frontend/src/pages/DashboardPage.test.ts`
 
-- [ ] **Step 1: 扩展失败测试**
+- [x] **Step 1: 扩展失败测试**
 
 验证：
 
@@ -184,9 +184,9 @@ error?: string
 编辑事件才打开 StudentFormModal
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
-- [ ] **Step 3: 实现数据状态**
+- [x] **Step 3: 实现数据状态**
 
 新增：
 
@@ -201,7 +201,7 @@ loadStudentWorkspace(studentId)
 
 学生刷新后使用 `normalizeSelectedStudentId` 校正选择。
 
-- [ ] **Step 4: 实现布局**
+- [x] **Step 4: 实现布局**
 
 桌面：
 
@@ -217,7 +217,7 @@ StudentOverview
 TemplateManager
 ```
 
-- [ ] **Step 5: 运行全量测试与构建**
+- [x] **Step 5: 运行全量测试与构建**
 
 ```powershell
 npm test
@@ -232,12 +232,12 @@ npm run build
 - Modify as needed: `app/frontend/src/components/students/*.vue`
 - Modify as needed: `app/frontend/src/pages/DashboardPage.vue`
 
-- [ ] **Step 1: 在 1440×900 验证双栏布局**
+- [x] **Step 1: 在 1440×900 验证双栏布局**
 
-- [ ] **Step 2: 在 390×844 验证列表、详情和模板顺序**
+- [x] **Step 2: 在 390×844 验证列表、详情和模板顺序**
 
-- [ ] **Step 3: 验证学生选择不自动打开编辑表单**
+- [x] **Step 3: 验证学生选择不自动打开编辑表单**
 
-- [ ] **Step 4: 运行最终测试和构建**
+- [x] **Step 4: 运行最终测试和构建**
 
-- [ ] **Step 5: 提交第二阶段实现**
+- [x] **Step 5: 提交第二阶段实现**
