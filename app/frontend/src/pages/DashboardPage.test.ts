@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import StudentOverview from '@/components/students/StudentOverview.vue'
 import StudentsPanel from '@/components/students/StudentsPanel.vue'
 import TemplateManager from '@/components/students/TemplateManager.vue'
+import StatsPanel from '@/components/stats/StatsPanel.vue'
 import DashboardPage from './DashboardPage.vue'
 
 const apiMocks = vi.hoisted(() => ({
@@ -95,6 +96,7 @@ async function mountDashboard(path = '/') {
     routes: [
       { path: '/', component: DashboardPage },
       { path: '/students', component: DashboardPage },
+      { path: '/stats', component: DashboardPage },
     ],
   })
   await router.push(path)
@@ -109,7 +111,7 @@ async function mountDashboard(path = '/') {
     },
   })
   await flushPromises()
-  return wrapper
+  return { wrapper, router }
 }
 
 beforeEach(() => {
@@ -129,7 +131,7 @@ describe('DashboardPage loading failures', () => {
   it('keeps the dashboard mounted and shows a recoverable message', async () => {
     apiMocks.lessonsList.mockRejectedValueOnce(new Error('network unavailable'))
 
-    const wrapper = await mountDashboard()
+    const { wrapper } = await mountDashboard()
 
     expect(wrapper.text()).toContain('数据加载失败，请检查网络后重试')
   })
@@ -137,7 +139,7 @@ describe('DashboardPage loading failures', () => {
 
 describe('DashboardPage student workspace', () => {
   it('loads the selected student workspace without opening the edit form', async () => {
-    const wrapper = await mountDashboard('/students')
+    const { wrapper } = await mountDashboard('/students')
 
     expect(apiMocks.studentGet).toHaveBeenCalledWith(1)
     expect(apiMocks.templatesList).toHaveBeenCalledWith(1)
@@ -154,9 +156,73 @@ describe('DashboardPage student workspace', () => {
     apiMocks.studentGet.mockRejectedValue(new Error('detail unavailable'))
     apiMocks.templatesList.mockRejectedValue(new Error('templates unavailable'))
 
-    const wrapper = await mountDashboard('/students')
+    const { wrapper } = await mountDashboard('/students')
 
     expect(wrapper.getComponent(StudentOverview).props('error')).toBe('学生详情加载失败')
     expect(wrapper.getComponent(TemplateManager).props('error')).toBe('模板加载失败')
+  })
+})
+
+describe('DashboardPage statistics workspace', () => {
+  it('loads the selected explicit period through every statistics endpoint', async () => {
+    const { wrapper } = await mountDashboard('/stats')
+
+    const [from, to, granularity] = apiMocks.statsRange.mock.calls.at(-1)!
+    expect(granularity).toBe('week')
+    expect(apiMocks.statsComparison).toHaveBeenLastCalledWith(from, to, 'month')
+    expect(apiMocks.statsStudents).toHaveBeenLastCalledWith(from, to)
+    expect(apiMocks.statsLeave).toHaveBeenLastCalledWith(from, to)
+    expect(wrapper.getComponent(StatsPanel).props('loading')).toBe(false)
+  })
+
+  it('keeps statistics failures local and retries the workspace', async () => {
+    apiMocks.statsRange.mockRejectedValueOnce(new Error('stats unavailable'))
+    const { wrapper } = await mountDashboard('/stats')
+
+    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('统计数据加载失败，请稍后重试')
+
+    wrapper.getComponent(StatsPanel).vm.$emit('retry')
+    await flushPromises()
+
+    expect(apiMocks.statsRange).toHaveBeenCalledTimes(2)
+    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('')
+  })
+
+  it('opens a contribution student in the student workspace and preserves the route selection', async () => {
+    const { wrapper, router } = await mountDashboard('/stats')
+
+    wrapper.getComponent(StatsPanel).vm.$emit('select-student', 2)
+    await flushPromises()
+
+    expect(router.currentRoute.value.fullPath).toBe('/students?student=2')
+    expect(apiMocks.studentGet).toHaveBeenLastCalledWith(2)
+    expect(apiMocks.templatesList).toHaveBeenLastCalledWith(2)
+  })
+
+  it('restores the selected student from the route query', async () => {
+    const { wrapper } = await mountDashboard('/students?student=2')
+
+    expect(apiMocks.studentGet).toHaveBeenLastCalledWith(2)
+    expect(wrapper.getComponent(StudentsPanel).props('selectedStudentId')).toBe(2)
+  })
+
+  it('ignores a stale response after the selected period changes', async () => {
+    let resolveFirst!: (value: unknown) => void
+    let resolveSecond!: (value: unknown) => void
+    apiMocks.statsRange
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve }))
+
+    const { wrapper } = await mountDashboard('/stats')
+    wrapper.getComponent(StatsPanel).vm.$emit('change-range', 'week')
+    await flushPromises()
+
+    resolveSecond({ total_income: 222, buckets: [] })
+    await flushPromises()
+    expect(wrapper.getComponent(StatsPanel).props('range')).toMatchObject({ total_income: 222 })
+
+    resolveFirst({ total_income: 111, buckets: [] })
+    await flushPromises()
+    expect(wrapper.getComponent(StatsPanel).props('range')).toMatchObject({ total_income: 222 })
   })
 })

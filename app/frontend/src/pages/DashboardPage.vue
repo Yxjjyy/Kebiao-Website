@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import SettingsPanel from '@/components/layout/SettingsPanel.vue'
 import CreateLessonModal from '@/components/schedule/CreateLessonModal.vue'
@@ -42,8 +42,12 @@ import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
 const route = useRoute()
+const router = useRouter()
 const activeTab = ref<string>('schedule')
 const loading = ref(false)
+const statsLoading = ref(false)
+const statsError = ref('')
+let statsRequestId = 0
 
 const lessons = ref<Lesson[]>([])
 const students = ref<Student[]>([])
@@ -177,29 +181,54 @@ async function loadDashboard() {
   scheduleError.value = ''
   try {
     const week = getWeekRange(currentWeekStart.value, (settingsStore.settings.week_start as 0 | 1) ?? 1)
-    const statsRange = getStatsRange(statsOffset.value)
-    const [lessonRows, studentRows, today, range, comparison, studentRanking, leaveRows] = await Promise.all([
+    const [lessonRows, studentRows, today] = await Promise.all([
       lessonsApi.list(toIsoDate(week.start), toIsoDate(week.end)),
       studentsApi.list(false),
       statsApi.today(),
-      statsApi.range(toIsoDate(statsRange.start), toIsoDate(statsRange.end), statsRange.granularity),
-      statsApi.comparison(statRange.value === 'month' ? 'month' : 'week'),
-      statsApi.students(toIsoDate(statsRange.start), toIsoDate(statsRange.end)),
-      statsApi.leave(toIsoDate(statsRange.start), toIsoDate(statsRange.end)),
     ])
     lessons.value = lessonRows
     students.value = studentRows
     todayStats.value = today
-    rangeStats.value = range
-    comparisonStats.value = comparison
-    ranking.value = studentRanking
-    leaveItems.value = leaveRows
-    selectedStudentId.value = normalizeSelectedStudentId(studentRows, selectedStudentId.value)
+    const requestedStudentId = route.path.startsWith('/students')
+      ? Number(route.query.student) || selectedStudentId.value
+      : selectedStudentId.value
+    selectedStudentId.value = normalizeSelectedStudentId(studentRows, requestedStudentId)
     refreshKey.value++
   } catch {
     scheduleError.value = '数据加载失败，请检查网络后重试'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadStatistics() {
+  const requestId = ++statsRequestId
+  const selectedRange = getStatsRange(statsOffset.value)
+  const from = toIsoDate(selectedRange.start)
+  const to = toIsoDate(selectedRange.end)
+  const period = statRange.value === 'today' ? 'day' : statRange.value
+  statsLoading.value = true
+  statsError.value = ''
+  try {
+    const [range, comparison, studentRanking, leaveRows] = await Promise.all([
+      statsApi.range(from, to, selectedRange.granularity),
+      statsApi.comparison(from, to, period),
+      statsApi.students(from, to),
+      statsApi.leave(from, to),
+    ])
+    if (requestId !== statsRequestId) return
+    rangeStats.value = range
+    comparisonStats.value = comparison
+    ranking.value = studentRanking
+    leaveItems.value = leaveRows
+  } catch {
+    if (requestId === statsRequestId) {
+      statsError.value = '统计数据加载失败，请稍后重试'
+    }
+  } finally {
+    if (requestId === statsRequestId) {
+      statsLoading.value = false
+    }
   }
 }
 
@@ -267,16 +296,26 @@ async function refreshStudentWorkspace() {
 }
 
 async function downloadMonthReport() {
-  const range = getStatsRange(statsOffset.value)
-  const blob = await exportApi.downloadXlsx(toIsoDate(range.start), toIsoDate(range.end))
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `kebiao_${toIsoDate(range.start)}_${toIsoDate(range.end)}.xlsx`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  statsError.value = ''
+  try {
+    const range = getStatsRange(statsOffset.value)
+    const blob = await exportApi.downloadXlsx(toIsoDate(range.start), toIsoDate(range.end))
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `kebiao_${toIsoDate(range.start)}_${toIsoDate(range.end)}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch {
+    statsError.value = '报表导出失败，请稍后重试'
+  }
+}
+
+async function openStudentWorkspace(studentId: number) {
+  selectedStudentId.value = studentId
+  await router.push({ path: '/students', query: { student: String(studentId) } })
 }
 
 async function moveLesson(payload: { lesson: Lesson; date: string; start_time: string }) {
@@ -428,12 +467,15 @@ watch(selectedStudentId, async () => {
 })
 
 watch(statRange, async () => {
-  statsOffset.value = 0
-  await loadDashboard()
+  if (statsOffset.value !== 0) {
+    statsOffset.value = 0
+    return
+  }
+  await loadStatistics()
 })
 
 watch(statsOffset, async () => {
-  await loadDashboard()
+  await loadStatistics()
 })
 
 watch(weekOffset, async () => {
@@ -441,9 +483,17 @@ watch(weekOffset, async () => {
 })
 
 watch(
-  () => route.path,
-  (path) => {
-    activeTab.value = tabFromPath(path)
+  () => route.fullPath,
+  async (_fullPath, previousFullPath) => {
+    const nextTab = tabFromPath(route.path)
+    activeTab.value = nextTab
+    if (nextTab === 'students' && students.value.length) {
+      const requestedStudentId = Number(route.query.student) || selectedStudentId.value
+      selectedStudentId.value = normalizeSelectedStudentId(students.value, requestedStudentId)
+    }
+    if (nextTab === 'stats' && previousFullPath !== undefined) {
+      await loadStatistics()
+    }
   },
   { immediate: true }
 )
@@ -456,7 +506,10 @@ watch(quickCreate, (value) => {
 
 onMounted(async () => {
   await settingsStore.refresh()
-  await loadDashboard()
+  await Promise.all([
+    loadDashboard(),
+    activeTab.value === 'stats' ? loadStatistics() : Promise.resolve(),
+  ])
 })
 </script>
 
@@ -703,11 +756,15 @@ onMounted(async () => {
         :stats-offset="statsOffset"
         :stats-period-label="statsPeriodLabel"
         :today="todayStats"
+        :loading="statsLoading"
+        :error="statsError"
         @change-range="statRange = $event"
         @export-range="downloadMonthReport"
         @go-current-period="goToCurrentStatsPeriod"
         @next-period="nextStatsPeriod"
         @prev-period="prevStatsPeriod"
+        @retry="loadStatistics"
+        @select-student="openStudentWorkspace"
       />
     </section>
 
