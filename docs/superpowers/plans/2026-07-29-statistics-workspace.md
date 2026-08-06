@@ -1,6 +1,6 @@
 # 数据统计工作台重构 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将统计页重构为响应式决策流工作台，提供准确的经营指标、同期比较、趋势、学生贡献、异常关注和学生联动。
 
@@ -48,7 +48,7 @@
 - Modify: `app/backend/app/schemas/stats.py`
 - Modify: `app/backend/app/services/stats_service.py`
 
-- [ ] **Step 1: 写范围统计失败测试**
+- [x] **Step 1: 写范围统计失败测试**
 
 在 `app/backend/tests/test_stats_service.py` 创建内存数据库，并覆盖四种课程状态、学生去重和原有字段兼容：
 
@@ -130,7 +130,7 @@ def test_range_stats_exposes_decision_metrics(db: Session):
     assert result.active_students == 2
 ```
 
-- [ ] **Step 2: 运行测试确认响应字段不存在**
+- [x] **Step 2: 运行测试确认响应字段不存在**
 
 Run:
 
@@ -141,7 +141,7 @@ python -m pytest tests/test_stats_service.py::test_range_stats_exposes_decision_
 
 Expected: FAIL，`RangeStats` 没有 `completed_lessons` 等字段。
 
-- [ ] **Step 3: 扩展 Pydantic 响应**
+- [x] **Step 3: 扩展 Pydantic 响应**
 
 在 `app/backend/app/schemas/stats.py` 的 `RangeStats` 中加入：
 
@@ -161,7 +161,7 @@ class RangeStats(BaseModel):
     buckets: list[RangeBucket]
 ```
 
-- [ ] **Step 4: 实现状态聚合和活跃学生去重**
+- [x] **Step 4: 实现状态聚合和活跃学生去重**
 
 在 `range_stats()` 中查询区间内全部状态课程；保留有效课程 bucket 口径，并用明确集合生成新增字段：
 
@@ -225,7 +225,7 @@ return RangeStats(
 )
 ```
 
-- [ ] **Step 5: 运行范围统计测试**
+- [x] **Step 5: 运行范围统计测试**
 
 Run:
 
@@ -236,7 +236,7 @@ python -m pytest tests/test_stats_service.py::test_range_stats_exposes_decision_
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交后端范围统计**
+- [x] **Step 6: 提交后端范围统计**
 
 ```powershell
 git add app/backend/tests/test_stats_service.py app/backend/app/schemas/stats.py app/backend/app/services/stats_service.py
@@ -253,7 +253,7 @@ git commit -m "feat: extend range statistics metrics"
 - Modify: `app/backend/app/routers/stats.py`
 - Modify: `API.md`
 
-- [ ] **Step 1: 写同期区间失败测试**
+- [x] **Step 1: 写同期区间失败测试**
 
 在 `app/backend/tests/test_stats_service.py` 增加：
 
@@ -332,7 +332,7 @@ def test_comparison_uses_requested_historical_range(db: Session):
     assert result.income_growth_pct == 100
 ```
 
-- [ ] **Step 2: 运行测试确认新签名和辅助函数不存在**
+- [x] **Step 2: 运行测试确认新签名和辅助函数不存在**
 
 Run:
 
@@ -343,7 +343,7 @@ python -m pytest tests/test_stats_service.py -v
 
 Expected: FAIL，`previous_period` 不存在，`comparison()` 不接受 `from_date` 与 `to_date`。
 
-- [ ] **Step 3: 实现上一等价自然周期**
+- [x] **Step 3: 实现上一等价自然周期**
 
 在 `stats_service.py` 新增：
 
@@ -433,7 +433,7 @@ return ComparisonStats(
 )
 ```
 
-- [ ] **Step 4: 扩展路由参数**
+- [x] **Step 4: 扩展路由参数**
 
 在 `app/backend/app/routers/stats.py`：
 
@@ -457,7 +457,7 @@ def stats_comparison(
 
 同时从 FastAPI 导入 `HTTPException`。
 
-- [ ] **Step 5: 更新 API 文档**
+- [x] **Step 5: 更新 API 文档**
 
 在 `API.md`：
 
@@ -465,7 +465,7 @@ def stats_comparison(
 - 将 `/stats/comparison` 参数写为 `from`、`to`、`period=day|week|month`。
 - 说明缺少 `from` 和 `to` 时保留当前周期兼容行为。
 
-- [ ] **Step 6: 运行后端测试**
+- [x] **Step 6: 运行后端测试**
 
 Run:
 
@@ -476,7 +476,7 @@ python -m pytest tests/test_stats_service.py -v
 
 Expected: 所有统计服务测试 PASS。
 
-- [ ] **Step 7: 提交同期比较**
+- [x] **Step 7: 提交同期比较**
 
 ```powershell
 git add app/backend/tests/test_stats_service.py app/backend/app/services/stats_service.py app/backend/app/routers/stats.py API.md
@@ -493,7 +493,7 @@ git commit -m "feat: compare explicit statistics periods"
 - Modify: `app/frontend/src/api/types.ts`
 - Modify: `app/frontend/src/api/stats.ts`
 
-- [ ] **Step 1: 写纯函数失败测试**
+- [x] **Step 1: 写纯函数失败测试**
 
 在 `statsWorkspace.test.ts` 覆盖：
 
@@ -557,7 +557,7 @@ describe('statistics workspace helpers', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试确认模块不存在**
+- [x] **Step 2: 运行测试确认模块不存在**
 
 Run:
 
@@ -568,7 +568,7 @@ npm test -- --run src/lib/statsWorkspace.test.ts
 
 Expected: FAIL，无法解析 `statsWorkspace`。
 
-- [ ] **Step 3: 扩展前端类型和 API**
+- [x] **Step 3: 扩展前端类型和 API**
 
 在 `RangeStats` 增加与后端一致的五个字段：
 
@@ -595,7 +595,7 @@ comparison: (
     .then((response) => response.data),
 ```
 
-- [ ] **Step 4: 实现纯函数**
+- [x] **Step 4: 实现纯函数**
 
 在 `statsWorkspace.ts` 导出：
 
@@ -666,7 +666,7 @@ export function fillTrendPoints(range: RangeStats): RangeBucket[] {
 }
 ```
 
-- [ ] **Step 5: 运行纯函数测试和类型检查**
+- [x] **Step 5: 运行纯函数测试和类型检查**
 
 Run:
 
@@ -678,7 +678,7 @@ npx vue-tsc --noEmit
 
 Expected: 测试和类型检查 PASS。
 
-- [ ] **Step 6: 提交前端统计基础**
+- [x] **Step 6: 提交前端统计基础**
 
 ```powershell
 git add app/frontend/src/lib/statsWorkspace.ts app/frontend/src/lib/statsWorkspace.test.ts app/frontend/src/api/types.ts app/frontend/src/api/stats.ts
@@ -695,7 +695,7 @@ git commit -m "feat: add statistics workspace helpers"
 - Create: `app/frontend/src/components/stats/StatsTrendChart.vue`
 - Create: `app/frontend/src/components/stats/StatsTrendChart.test.ts`
 
-- [ ] **Step 1: 写指标组件失败测试**
+- [x] **Step 1: 写指标组件失败测试**
 
 测试使用一个完整 `RangeStats` 和 `ComparisonStats`，验证：
 
@@ -717,7 +717,7 @@ expect(wrapper.text()).toContain('较上期 ↑20.0%')
 expect(wrapper.text()).toContain('暂无课程')
 ```
 
-- [ ] **Step 2: 运行指标测试确认组件不存在**
+- [x] **Step 2: 运行指标测试确认组件不存在**
 
 ```powershell
 cd app/frontend
@@ -726,7 +726,7 @@ npm test -- --run src/components/stats/StatsMetricGrid.test.ts
 
 Expected: FAIL，组件不存在。
 
-- [ ] **Step 3: 实现 `StatsMetricGrid.vue`**
+- [x] **Step 3: 实现 `StatsMetricGrid.vue`**
 
 Props：
 
@@ -800,7 +800,7 @@ const metrics = computed(() => {
 
 收入和课时显示同期文案；完成率显示“已完成 X / 共 Y 节”；活跃学生显示“本期覆盖学生”。
 
-- [ ] **Step 4: 写趋势组件失败测试**
+- [x] **Step 4: 写趋势组件失败测试**
 
 验证：
 
@@ -818,7 +818,7 @@ expect(wrapper.getAll('[data-testid="trend-point"]')[0].attributes('aria-label')
   .toContain('2026-07-01')
 ```
 
-- [ ] **Step 5: 运行趋势测试确认组件不存在**
+- [x] **Step 5: 运行趋势测试确认组件不存在**
 
 ```powershell
 cd app/frontend
@@ -827,7 +827,7 @@ npm test -- --run src/components/stats/StatsTrendChart.test.ts
 
 Expected: FAIL。
 
-- [ ] **Step 6: 实现 `StatsTrendChart.vue`**
+- [x] **Step 6: 实现 `StatsTrendChart.vue`**
 
 Props：
 
@@ -878,7 +878,7 @@ const chart = computed(() => {
 
 不要引入 ECharts 或新的依赖。
 
-- [ ] **Step 7: 运行两个组件测试**
+- [x] **Step 7: 运行两个组件测试**
 
 ```powershell
 cd app/frontend
@@ -887,7 +887,7 @@ npm test -- --run src/components/stats/StatsMetricGrid.test.ts src/components/st
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交指标和趋势**
+- [x] **Step 8: 提交指标和趋势**
 
 ```powershell
 git add app/frontend/src/components/stats/StatsMetricGrid.vue app/frontend/src/components/stats/StatsMetricGrid.test.ts app/frontend/src/components/stats/StatsTrendChart.vue app/frontend/src/components/stats/StatsTrendChart.test.ts
@@ -904,7 +904,7 @@ git commit -m "feat: add statistics metrics and trends"
 - Create: `app/frontend/src/components/stats/AttentionList.vue`
 - Create: `app/frontend/src/components/stats/AttentionList.test.ts`
 
-- [ ] **Step 1: 写学生贡献失败测试**
+- [x] **Step 1: 写学生贡献失败测试**
 
 验证：
 
@@ -920,7 +920,7 @@ expect(wrapper.emitted('select-student')).toEqual([[1]])
 
 同时验证空数组显示“当前周期暂无学生贡献数据”。
 
-- [ ] **Step 2: 实现 `StudentContribution.vue`**
+- [x] **Step 2: 实现 `StudentContribution.vue`**
 
 Props 与事件：
 
@@ -945,7 +945,7 @@ const maximumIncome = computed(
 
 每行使用按钮语义，贡献条宽度来自 `contributionPercent()`。
 
-- [ ] **Step 3: 写关注记录失败测试**
+- [x] **Step 3: 写关注记录失败测试**
 
 传入四条记录并验证：
 
@@ -957,7 +957,7 @@ expect(wrapper.getAll('[data-testid="attention-item"]')).toHaveLength(4)
 
 空数组显示“当前周期没有请假或调课记录”。请假与调课必须同时显示文字标签，不能只靠颜色。
 
-- [ ] **Step 4: 实现 `AttentionList.vue`**
+- [x] **Step 4: 实现 `AttentionList.vue`**
 
 Props：
 
@@ -976,7 +976,7 @@ const visibleItems = computed(() => visibleAttentionItems(props.items, expanded.
 
 展开按钮只在 `items.length > 3` 时出现；切换文案为“展开全部 / 收起”。
 
-- [ ] **Step 5: 运行两个组件测试**
+- [x] **Step 5: 运行两个组件测试**
 
 ```powershell
 cd app/frontend
@@ -985,7 +985,7 @@ npm test -- --run src/components/stats/StudentContribution.test.ts src/component
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交决策辅助组件**
+- [x] **Step 6: 提交决策辅助组件**
 
 ```powershell
 git add app/frontend/src/components/stats/StudentContribution.vue app/frontend/src/components/stats/StudentContribution.test.ts app/frontend/src/components/stats/AttentionList.vue app/frontend/src/components/stats/AttentionList.test.ts
@@ -1000,7 +1000,7 @@ git commit -m "feat: add statistics decision panels"
 - Modify: `app/frontend/src/components/stats/StatsPanel.vue`
 - Create: `app/frontend/src/components/stats/StatsPanel.test.ts`
 
-- [ ] **Step 1: 写决策流布局失败测试**
+- [x] **Step 1: 写决策流布局失败测试**
 
 测试 `StatsPanel`：
 
@@ -1025,7 +1025,7 @@ const emit = defineEmits<{
 }>()
 ```
 
-- [ ] **Step 2: 运行测试确认旧组件不符合新接口**
+- [x] **Step 2: 运行测试确认旧组件不符合新接口**
 
 ```powershell
 cd app/frontend
@@ -1034,7 +1034,7 @@ npm test -- --run src/components/stats/StatsPanel.test.ts
 
 Expected: FAIL。
 
-- [ ] **Step 3: 替换旧内联图表**
+- [x] **Step 3: 替换旧内联图表**
 
 删除 `StatsPanel.vue` 中的旧趋势坐标、排行 SVG、hover 状态和内联指标卡，新增 Props：
 
@@ -1081,7 +1081,7 @@ error: string
 </div>
 ```
 
-- [ ] **Step 4: 运行统计面板和所有统计组件测试**
+- [x] **Step 4: 运行统计面板和所有统计组件测试**
 
 ```powershell
 cd app/frontend
@@ -1090,7 +1090,7 @@ npm test -- --run src/components/stats
 
 Expected: 全部 PASS。
 
-- [ ] **Step 5: 提交统计面板**
+- [x] **Step 5: 提交统计面板**
 
 ```powershell
 git add app/frontend/src/components/stats/StatsPanel.vue app/frontend/src/components/stats/StatsPanel.test.ts
@@ -1105,7 +1105,7 @@ git commit -m "feat: compose statistics decision workspace"
 - Modify: `app/frontend/src/pages/DashboardPage.vue`
 - Modify: `app/frontend/src/pages/DashboardPage.test.ts`
 
-- [ ] **Step 1: 扩展路由和统计失败测试**
+- [x] **Step 1: 扩展路由和统计失败测试**
 
 在测试路由加入：
 
@@ -1138,7 +1138,7 @@ function deferred<T>() {
 }
 ```
 
-- [ ] **Step 2: 运行页面测试确认失败**
+- [x] **Step 2: 运行页面测试确认失败**
 
 ```powershell
 cd app/frontend
@@ -1147,7 +1147,7 @@ npm test -- --run src/pages/DashboardPage.test.ts
 
 Expected: FAIL，统计仍与 `loadDashboard()` 绑定，比较 API 使用旧签名。
 
-- [ ] **Step 3: 添加独立统计状态**
+- [x] **Step 3: 添加独立统计状态**
 
 在 `DashboardPage.vue` 新增：
 
@@ -1161,7 +1161,7 @@ let statsRequestId = 0
 
 课表首页仍可加载 `statsApi.today()`，但统计区间数据只由 `loadStatistics()` 维护。
 
-- [ ] **Step 4: 实现带竞态保护的 `loadStatistics()`**
+- [x] **Step 4: 实现带竞态保护的 `loadStatistics()`**
 
 ```ts
 async function loadStatistics() {
@@ -1194,7 +1194,7 @@ async function loadStatistics() {
 }
 ```
 
-- [ ] **Step 5: 调整统计监听和进入页面加载**
+- [x] **Step 5: 调整统计监听和进入页面加载**
 
 用单个 watcher 处理统计范围，范围变化时先复位 offset，避免重复请求：
 
@@ -1230,7 +1230,7 @@ watch(
 
 删除原来由 `statRange` 和 `statsOffset` 调用 `loadDashboard()` 的两个 watcher。
 
-- [ ] **Step 6: 实现学生查询参数联动**
+- [x] **Step 6: 实现学生查询参数联动**
 
 导入 `useRouter`：
 
@@ -1261,7 +1261,7 @@ selectedStudentId.value = normalizeSelectedStudentId(
 
 同时监听 `route.query.student`，支持在已加载学生后通过路由更新选择。
 
-- [ ] **Step 7: 添加导出错误反馈**
+- [x] **Step 7: 添加导出错误反馈**
 
 在 `downloadMonthReport()` 开始时清除导出错误；catch 时设置：
 
@@ -1271,7 +1271,7 @@ statsError.value = '导出失败，请稍后重试'
 
 不要在请求失败时创建下载链接。
 
-- [ ] **Step 8: 连接 `StatsPanel` 新接口**
+- [x] **Step 8: 连接 `StatsPanel` 新接口**
 
 ```html
 <StatsPanel
@@ -1297,7 +1297,7 @@ statsError.value = '导出失败，请稍后重试'
 />
 ```
 
-- [ ] **Step 9: 运行 Dashboard 测试和全量前端测试**
+- [x] **Step 9: 运行 Dashboard 测试和全量前端测试**
 
 ```powershell
 cd app/frontend
@@ -1307,7 +1307,7 @@ npm test -- --run
 
 Expected: 全部 PASS。
 
-- [ ] **Step 10: 提交页面编排**
+- [x] **Step 10: 提交页面编排**
 
 ```powershell
 git add app/frontend/src/pages/DashboardPage.vue app/frontend/src/pages/DashboardPage.test.ts
@@ -1324,7 +1324,7 @@ git commit -m "feat: orchestrate statistics workspace"
 - Verify: `app/backend/app/services/stats_service.py`
 - Update: `docs/superpowers/plans/2026-07-29-statistics-workspace.md`
 
-- [ ] **Step 1: 运行后端测试**
+- [x] **Step 1: 运行后端测试**
 
 ```powershell
 cd app/backend
@@ -1333,7 +1333,7 @@ python -m pytest -v
 
 Expected: 所有后端测试 PASS。
 
-- [ ] **Step 2: 运行前端测试和生产构建**
+- [x] **Step 2: 运行前端测试和生产构建**
 
 ```powershell
 cd app/frontend
@@ -1343,7 +1343,7 @@ npm run build
 
 Expected: 所有 Vitest 测试 PASS，Vue TypeScript 检查和 Vite 构建成功。
 
-- [ ] **Step 3: 启动后端和前端**
+- [x] **Step 3: 启动后端和前端**
 
 使用项目虚拟环境或先安装 `app/backend/requirements.txt`，然后：
 
@@ -1359,7 +1359,7 @@ cd app/frontend
 npm run dev -- --host 127.0.0.1
 ```
 
-- [ ] **Step 4: 验收 1440×900**
+- [x] **Step 4: 验收 1440×900**
 
 打开 `http://127.0.0.1:5173/stats`，确认：
 
@@ -1370,7 +1370,7 @@ npm run dev -- --host 127.0.0.1
 - 页面无横向溢出。
 - 点击学生贡献进入对应学生工作台且学生已选中。
 
-- [ ] **Step 5: 验收 390×844**
+- [x] **Step 5: 验收 390×844**
 
 确认：
 
@@ -1381,14 +1381,14 @@ npm run dev -- --host 127.0.0.1
 - 关注记录默认三条，可展开。
 - 底部导航无遮挡，无横向溢出。
 
-- [ ] **Step 6: 验收错误与暗色模式**
+- [x] **Step 6: 验收错误与暗色模式**
 
 - 暂停后端或拦截统计请求，确认最后成功数据被保留并出现重试提示。
 - 恢复后端并点击重试，确认错误消失。
 - 切换暗色主题，确认指标、图表、增长语义色和焦点状态可读。
 - 模拟导出失败，确认显示“导出失败，请稍后重试”。
 
-- [ ] **Step 7: 差异检查和工作区确认**
+- [x] **Step 7: 差异检查和工作区确认**
 
 ```powershell
 git diff --check
@@ -1397,7 +1397,7 @@ git status --short
 
 Expected: 无空白错误；只包含第三阶段预期文件。
 
-- [ ] **Step 8: 更新计划并提交最终调整**
+- [x] **Step 8: 更新计划并提交最终调整**
 
 将本计划已完成步骤改为 `[x]`。如果浏览器验收产生代码调整，重新运行受影响测试和完整构建后提交：
 

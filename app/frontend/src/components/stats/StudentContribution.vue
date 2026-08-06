@@ -76,9 +76,3 @@ const maximumIncome = computed(() => rankedStudents.value[0]?.total_income ?? 0)
     </div>
   </section>
 </template>
-
-<style scoped>
-.contribution-row:nth-child(n + 5) {
-  display: none;
-}
-</style>

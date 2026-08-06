@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
   statsComparison: vi.fn(),
   statsStudents: vi.fn(),
   statsLeave: vi.fn(),
+  exportDownload: vi.fn(),
   templatesList: vi.fn(),
 }))
 
@@ -43,6 +44,10 @@ vi.mock('@/api/stats', () => ({
 
 vi.mock('@/api/templates', () => ({
   templatesApi: { list: apiMocks.templatesList },
+}))
+
+vi.mock('@/api/export', () => ({
+  exportApi: { downloadXlsx: apiMocks.exportDownload },
 }))
 
 vi.mock('@/api/settings', () => ({
@@ -125,6 +130,7 @@ beforeEach(() => {
   apiMocks.statsStudents.mockResolvedValue([])
   apiMocks.statsLeave.mockResolvedValue([])
   apiMocks.templatesList.mockResolvedValue([])
+  apiMocks.exportDownload.mockResolvedValue(new Blob())
 })
 
 describe('DashboardPage loading failures', () => {
@@ -173,6 +179,16 @@ describe('DashboardPage statistics workspace', () => {
     expect(apiMocks.statsStudents).toHaveBeenLastCalledWith(from, to)
     expect(apiMocks.statsLeave).toHaveBeenLastCalledWith(from, to)
     expect(wrapper.getComponent(StatsPanel).props('loading')).toBe(false)
+  })
+
+  it('uses a day comparison for today', async () => {
+    const { wrapper } = await mountDashboard('/stats')
+
+    wrapper.getComponent(StatsPanel).vm.$emit('change-range', 'today')
+    await flushPromises()
+
+    const [from, to] = apiMocks.statsRange.mock.calls.at(-1)!
+    expect(apiMocks.statsComparison).toHaveBeenLastCalledWith(from, to, 'day')
   })
 
   it('keeps statistics failures local and retries the workspace', async () => {
@@ -224,5 +240,27 @@ describe('DashboardPage statistics workspace', () => {
     resolveFirst({ total_income: 111, buckets: [] })
     await flushPromises()
     expect(wrapper.getComponent(StatsPanel).props('range')).toMatchObject({ total_income: 222 })
+  })
+
+  it('retains the last successful data when a refresh fails', async () => {
+    apiMocks.statsRange.mockResolvedValueOnce({ total_income: 800, buckets: [] })
+    const { wrapper } = await mountDashboard('/stats')
+    apiMocks.statsRange.mockRejectedValueOnce(new Error('refresh unavailable'))
+
+    wrapper.getComponent(StatsPanel).vm.$emit('change-range', 'week')
+    await flushPromises()
+
+    expect(wrapper.getComponent(StatsPanel).props('range')).toMatchObject({ total_income: 800 })
+    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('统计数据加载失败，请稍后重试')
+  })
+
+  it('reports export failures without creating a download', async () => {
+    apiMocks.exportDownload.mockRejectedValueOnce(new Error('export unavailable'))
+    const { wrapper } = await mountDashboard('/stats')
+
+    wrapper.getComponent(StatsPanel).vm.$emit('export-range')
+    await flushPromises()
+
+    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('报表导出失败，请稍后重试')
   })
 })

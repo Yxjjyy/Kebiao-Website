@@ -61,7 +61,7 @@ const ranges = [
               :data-range="rangeOption.value"
               :aria-pressed="statRange === rangeOption.value"
               :class="[
-                'rounded-[10px] px-3 py-1.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+                'min-h-11 rounded-[10px] px-3 py-1.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
                 statRange === rangeOption.value
                   ? 'bg-[var(--accent)] text-white shadow-sm'
                   : 'text-[var(--text-dim)] hover:text-[var(--text)]',
@@ -73,7 +73,7 @@ const ranges = [
           </div>
           <button
             type="button"
-            class="btn-ghost btn-sm text-[11px]"
+            class="btn-ghost btn-sm min-h-11 text-[11px]"
             :disabled="loading"
             @click="emit('export-range')"
           >
@@ -129,15 +129,15 @@ const ranges = [
 
     <template v-else>
       <StatsMetricGrid :range="range" :comparison="comparison" :currency-symbol="currencySymbol" />
-      <div class="grid gap-3 lg:grid-cols-[1.55fr_0.85fr]">
-        <StatsTrendChart :range="range" :currency-symbol="currencySymbol" />
+      <StatsTrendChart :range="range" :currency-symbol="currencySymbol" />
+      <div class="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.85fr)]">
         <StudentContribution
           :ranking="ranking"
           :currency-symbol="currencySymbol"
           @select-student="emit('select-student', $event)"
         />
+        <AttentionList :items="leaveItems" />
       </div>
-      <AttentionList :items="leaveItems" />
     </template>
   </div>
 </template>
@@ -145,8 +145,8 @@ const ranges = [
 <style scoped>
 .nav-button {
   display: grid;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
   place-items: center;
   border-radius: 0.65rem;
   color: var(--text-dim);

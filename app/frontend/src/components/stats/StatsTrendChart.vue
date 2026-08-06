@@ -69,13 +69,13 @@ function showPoint(index: number) {
         <button
           data-testid="metric-income-toggle"
           :aria-pressed="mobileMetric === 'income'"
-          :class="['min-h-10 rounded-lg px-3 text-xs font-bold transition-colors', mobileMetric === 'income' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-dim)]']"
+          :class="['min-h-11 rounded-lg px-3 text-xs font-bold transition-colors', mobileMetric === 'income' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-dim)]']"
           @click="mobileMetric = 'income'"
         >收入</button>
         <button
           data-testid="metric-hours-toggle"
           :aria-pressed="mobileMetric === 'hours'"
-          :class="['min-h-10 rounded-lg px-3 text-xs font-bold transition-colors', mobileMetric === 'hours' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-dim)]']"
+          :class="['min-h-11 rounded-lg px-3 text-xs font-bold transition-colors', mobileMetric === 'hours' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-dim)]']"
           @click="mobileMetric = 'hours'"
         >课时</button>
       </div>
