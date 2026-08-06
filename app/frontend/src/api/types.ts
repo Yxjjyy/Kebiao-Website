@@ -73,6 +73,11 @@ export interface RangeStats {
   total_income: number
   total_hours: number
   total_lessons: number
+  completed_lessons: number
+  pending_lessons: number
+  leave_count: number
+  reschedule_count: number
+  active_students: number
   buckets: RangeBucket[]
 }
 
