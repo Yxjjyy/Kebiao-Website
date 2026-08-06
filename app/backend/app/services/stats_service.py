@@ -282,28 +282,56 @@ def _growth_pct(cur: float, prev: float) -> float | None:
     return (cur - prev) / prev * 100.0
 
 
-def comparison(db: Session, period: str = "week") -> ComparisonStats:
-    today_ = today()
+def previous_period(
+    from_date: date,
+    to_date: date,
+    period: str,
+) -> tuple[date, date]:
+    if from_date > to_date:
+        raise ValueError("from_date 不能晚于 to_date")
+    elapsed_days = (to_date - from_date).days
+    if period == "day":
+        previous = from_date - timedelta(days=1)
+        return previous, previous
     if period == "week":
-        cur_start = week_start(today_)
-        cur_end = today_
-        days_elapsed = (today_ - cur_start).days
-        prev_start = cur_start - timedelta(days=7)
-        prev_end = prev_start + timedelta(days=days_elapsed)
-    elif period == "month":
-        cur_start = month_start(today_)
-        cur_end = today_
-        days_elapsed = (today_ - cur_start).days
-        prev_month_today = cur_start - timedelta(days=1)
-        prev_start = month_start(prev_month_today)
-        prev_end = prev_start + timedelta(days=days_elapsed)
-        # 若上月没有这么多天，截到月末
-        prev_end = min(prev_end, month_end(prev_month_today))
-    else:
-        raise ValueError("period 必须为 week/month")
+        previous_start = from_date - timedelta(days=7)
+        return previous_start, previous_start + timedelta(days=elapsed_days)
+    if period == "month":
+        previous_anchor = from_date - timedelta(days=1)
+        previous_start = month_start(previous_anchor)
+        previous_end = min(
+            previous_start + timedelta(days=elapsed_days),
+            month_end(previous_anchor),
+        )
+        return previous_start, previous_end
+    raise ValueError("period 必须为 day/week/month")
 
-    cur_income, cur_hours, cur_lessons = _sum_in_range(db, cur_start, cur_end)
-    prev_income, prev_hours, prev_lessons = _sum_in_range(db, prev_start, prev_end)
+
+def comparison(
+    db: Session,
+    period: str = "week",
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> ComparisonStats:
+    if (from_date is None) != (to_date is None):
+        raise ValueError("from_date 和 to_date 必须同时提供")
+
+    if from_date is None or to_date is None:
+        today_ = today()
+        if period == "day":
+            cur_start = cur_end = today_
+        elif period == "week":
+            cur_start, cur_end = week_start(today_), today_
+        elif period == "month":
+            cur_start, cur_end = month_start(today_), today_
+        else:
+            raise ValueError("period 必须为 day/week/month")
+    else:
+        cur_start, cur_end = from_date, to_date
+
+    prev_start, prev_end = previous_period(cur_start, cur_end, period)
+    _, cur_hours, cur_lessons = _sum_in_range(db, cur_start, cur_end)
+    _, prev_hours, prev_lessons = _sum_in_range(db, prev_start, prev_end)
     cur_earned = _sum_in_range(db, cur_start, cur_end, EARNED_STATUSES)[0]
     prev_earned = _sum_in_range(db, prev_start, prev_end, EARNED_STATUSES)[0]
 

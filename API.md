@@ -339,6 +339,26 @@
 | to | date | 是 | 结束日期 |
 | granularity | string | 否 | day/week/month |
 
+响应：
+```json
+{
+  "from_date": "2026-07-01",
+  "to_date": "2026-07-31",
+  "granularity": "week",
+  "total_income": 12680.0,
+  "total_hours": 46.5,
+  "total_lessons": 52,
+  "completed_lessons": 46,
+  "pending_lessons": 6,
+  "leave_count": 2,
+  "reschedule_count": 1,
+  "active_students": 12,
+  "buckets": []
+}
+```
+
+`total_lessons`、`total_hours` 只统计“待上”和“已完成”；`total_income` 只统计“已完成”。
+
 ---
 
 **GET** `/api/v1/stats/students` — 学生排名
@@ -364,9 +384,13 @@
 **GET** `/api/v1/stats/comparison` — 环比统计
 
 参数：
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| period | string | week/week-over-week / month/month-over-month |
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| from | date | 否 | 当前比较区间开始日期；与 `to` 同时提供 |
+| to | date | 否 | 当前比较区间结束日期；与 `from` 同时提供 |
+| period | string | 否 | day/week/month，默认 week |
+
+提供 `from` 和 `to` 时，接口按当前区间计算上一等价自然周期；不提供时保留当前周或当前月的兼容行为。
 
 ---
 

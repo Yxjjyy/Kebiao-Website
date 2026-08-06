@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
@@ -53,7 +53,16 @@ def stats_leave(
 
 @router.get("/comparison", response_model=ComparisonStats)
 def stats_comparison(
-    period: str = Query("week", pattern="^(week|month)$"),
+    period: str = Query("week", pattern="^(day|week|month)$"),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
     db: Session = Depends(get_db),
 ):
-    return stats_service.comparison(db, period)
+    if (from_date is None) != (to_date is None):
+        raise HTTPException(status_code=422, detail="from 和 to 必须同时提供")
+    return stats_service.comparison(
+        db,
+        period=period,
+        from_date=from_date,
+        to_date=to_date,
+    )
