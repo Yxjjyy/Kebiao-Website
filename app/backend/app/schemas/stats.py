@@ -28,6 +28,11 @@ class RangeStats(BaseModel):
     total_income: float
     total_hours: float
     total_lessons: int
+    completed_lessons: int
+    pending_lessons: int
+    leave_count: int
+    reschedule_count: int
+    active_students: int
     buckets: list[RangeBucket]
 
 

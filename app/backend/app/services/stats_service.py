@@ -92,29 +92,37 @@ def range_stats(
     to_date: date,
     granularity: str = "day",
 ) -> RangeStats:
-    rows = db.execute(
+    all_rows = db.execute(
         select(Lesson).where(
             Lesson.date >= from_date,
             Lesson.date <= to_date,
-            Lesson.status.in_(ACTIVE_STATUSES),
         )
     ).scalars().all()
 
-    completed = [r for r in rows if r.status == "已完成"]
+    active_rows = [row for row in all_rows if row.status in ACTIVE_STATUSES]
+    completed = [row for row in all_rows if row.status == "已完成"]
+    pending = [row for row in all_rows if row.status == "待上"]
+    leave_rows = [row for row in all_rows if row.status == "请假"]
+    rescheduled_rows = [row for row in all_rows if row.status == "已调课"]
+    active_student_ids = {
+        row.student_id
+        for row in all_rows
+        if row.status in ("待上", "已完成", "请假")
+    }
 
     buckets: dict[str, dict] = {}
-    for r in completed:
-        key = _bucket_key(r.date, granularity)
+    for row in completed:
+        key = _bucket_key(row.date, granularity)
         b = buckets.setdefault(
             key, {"income": 0.0, "hours": 0.0, "lesson_count": 0}
         )
-        b["income"] += r.price
-    for r in rows:
-        key = _bucket_key(r.date, granularity)
+        b["income"] += row.price
+    for row in active_rows:
+        key = _bucket_key(row.date, granularity)
         b = buckets.setdefault(
             key, {"income": 0.0, "hours": 0.0, "lesson_count": 0}
         )
-        b["hours"] += r.duration_hours
+        b["hours"] += row.duration_hours
         b["lesson_count"] += 1
 
     bucket_list = sorted(
@@ -134,9 +142,14 @@ def range_stats(
         from_date=from_date,
         to_date=to_date,
         granularity=granularity,
-        total_income=float(sum(r.price for r in completed)),
-        total_hours=float(sum(r.duration_hours for r in rows)),
-        total_lessons=len(rows),
+        total_income=float(sum(row.price for row in completed)),
+        total_hours=float(sum(row.duration_hours for row in active_rows)),
+        total_lessons=len(active_rows),
+        completed_lessons=len(completed),
+        pending_lessons=len(pending),
+        leave_count=len(leave_rows),
+        reschedule_count=len(rescheduled_rows),
+        active_students=len(active_student_ids),
         buckets=bucket_list,
     )
 
