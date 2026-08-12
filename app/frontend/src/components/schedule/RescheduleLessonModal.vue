@@ -88,6 +88,7 @@ async function submit() {
         time-label="新时间"
         duration-label="新课时"
         id-prefix="reschedule-lesson"
+        :disabled="submitting"
       />
 
       <FormField for-id="reschedule-lesson-note" label="备注" hint="可选，说明本次调课原因">

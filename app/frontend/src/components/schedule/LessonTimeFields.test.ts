@@ -22,4 +22,11 @@ describe('LessonTimeFields', () => {
     expect(wrapper.emitted('update:startTime')).toEqual([['11:30']])
     expect(wrapper.emitted('update:durationHours')).toEqual([[1.5]])
   })
+
+  it('disables every time field while its parent operation is pending', () => {
+    const wrapper = mount(LessonTimeFields, {
+      props: { date: '2026-08-10', startTime: '10:00', durationHours: 1, disabled: true },
+    })
+    expect(wrapper.findAll('input, select').every(field => (field.element as HTMLInputElement).disabled)).toBe(true)
+  })
 })

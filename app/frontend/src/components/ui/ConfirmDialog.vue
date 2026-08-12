@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppDialog from './AppDialog.vue'
 import AsyncButton from './AsyncButton.vue'
+import InlineAlert from './InlineAlert.vue'
 
 withDefaults(defineProps<{
   open: boolean
@@ -11,6 +12,7 @@ withDefaults(defineProps<{
   pending?: boolean
   pendingLabel?: string
   tone?: 'primary' | 'danger'
+  error?: string
 }>(), {
   description: '',
   confirmLabel: '确认',
@@ -18,6 +20,7 @@ withDefaults(defineProps<{
   pending: false,
   pendingLabel: '处理中…',
   tone: 'danger',
+  error: '',
 })
 
 const emit = defineEmits<{
@@ -43,6 +46,7 @@ function close() {
     @close="emit('cancel')"
   >
     <slot />
+    <InlineAlert v-if="error" class="mt-4" tone="error" :message="error" />
     <template #footer>
       <button type="button" class="btn-ghost" :disabled="pending" @click="close">
         {{ cancelLabel }}

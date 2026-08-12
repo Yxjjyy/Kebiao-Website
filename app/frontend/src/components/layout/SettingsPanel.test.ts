@@ -43,4 +43,12 @@ describe('SettingsPanel', () => {
     expect(wrapper.text()).not.toContain('令牌')
     expect(wrapper.text()).not.toContain('登录')
   })
+
+  it('previews a selected theme before save', async () => {
+    const wrapper = mount(SettingsPanel)
+    await wrapper.get('#settings-theme').setValue('dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    await wrapper.get('#settings-theme').setValue('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
 })

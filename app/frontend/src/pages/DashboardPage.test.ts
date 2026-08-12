@@ -23,10 +23,11 @@ const apiMocks = vi.hoisted(() => ({
   templatesList: vi.fn(),
   lessonsBulk: vi.fn(),
   lessonsRemove: vi.fn(),
+  lessonsCancel: vi.fn(),
 }))
 
 vi.mock('@/api/lessons', () => ({
-  lessonsApi: { list: apiMocks.lessonsList, bulk: apiMocks.lessonsBulk, remove: apiMocks.lessonsRemove },
+  lessonsApi: { list: apiMocks.lessonsList, bulk: apiMocks.lessonsBulk, remove: apiMocks.lessonsRemove, cancel: apiMocks.lessonsCancel },
 }))
 
 vi.mock('@/api/students', () => ({
@@ -136,6 +137,7 @@ beforeEach(() => {
   apiMocks.templatesList.mockResolvedValue([])
   apiMocks.lessonsBulk.mockResolvedValue({ affected: 0 })
   apiMocks.lessonsRemove.mockResolvedValue(undefined)
+  apiMocks.lessonsCancel.mockResolvedValue(undefined)
   apiMocks.exportDownload.mockResolvedValue(new Blob())
 })
 
@@ -168,6 +170,19 @@ describe('DashboardPage destructive actions', () => {
     const dialog = wrapper.getComponent(ConfirmDialog)
     expect(dialog.props('description')).toContain('1 节')
     expect(apiMocks.lessonsBulk).not.toHaveBeenCalled()
+  })
+
+  it('confirms a quick cancellation before calling the API', async () => {
+    apiMocks.lessonsList.mockResolvedValue([lesson])
+    const { wrapper } = await mountDashboard()
+    wrapper.getComponent(ScheduleBoard).vm.$emit('cancel-lesson', lesson)
+    await flushPromises()
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('title')).toContain('请假')
+    expect(apiMocks.lessonsCancel).not.toHaveBeenCalled()
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(apiMocks.lessonsCancel).toHaveBeenCalledTimes(1)
   })
 })
 

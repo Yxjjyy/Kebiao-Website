@@ -35,6 +35,7 @@ const saving = ref(false)
 const statusUpdating = ref<Lesson['status'] | null>(null)
 const deleting = ref(false)
 const confirmDeleteOpen = ref(false)
+const confirmCancelOpen = ref(false)
 const busy = computed(() => saving.value || Boolean(statusUpdating.value) || deleting.value)
 
 watch(() => props.lesson, (lesson) => {
@@ -69,6 +70,7 @@ async function updateStatus(status: Lesson['status']) {
     else if (status === '待上') await lessonsApi.restore(props.lesson.id)
     else await lessonsApi.update(props.lesson.id, { status })
     editForm.status = status
+    if (status === '请假') confirmCancelOpen.value = false
     message.value = `状态已更新为“${status}”`
     toast.show('课时状态已更新')
     emit('refresh')
@@ -145,7 +147,7 @@ async function removeLesson() {
         <h3 id="lesson-quick-actions" class="mb-2 text-xs font-semibold text-[var(--text-dim)]">快捷操作</h3>
         <div class="flex flex-wrap gap-2">
           <AsyncButton type="button" tone="ghost" size="sm" :pending="statusUpdating === '已完成'" :disabled="busy" pending-label="完成中…" @click="updateStatus('已完成')">完成</AsyncButton>
-          <AsyncButton type="button" tone="ghost" size="sm" :pending="statusUpdating === '请假'" :disabled="busy" pending-label="请假中…" @click="updateStatus('请假')">请假</AsyncButton>
+          <AsyncButton type="button" tone="ghost" size="sm" :pending="statusUpdating === '请假'" :disabled="busy" pending-label="请假中…" @click="error = ''; confirmCancelOpen = true">请假</AsyncButton>
           <AsyncButton type="button" tone="ghost" size="sm" :pending="statusUpdating === '待上'" :disabled="busy" pending-label="恢复中…" @click="updateStatus('待上')">恢复</AsyncButton>
           <button type="button" class="btn-ghost btn-sm" :disabled="busy" @click="downloadICS(lesson, studentName)">加入日历</button>
           <button type="button" data-action="delete-lesson" class="btn-danger btn-sm" :disabled="busy" @click="confirmDeleteOpen = true">删除</button>
@@ -159,6 +161,7 @@ async function removeLesson() {
           v-model:start-time="editForm.start_time"
           v-model:duration-hours="editForm.duration_hours"
           id-prefix="edit-lesson"
+          :disabled="busy"
         />
         <FormField for-id="edit-lesson-status" label="状态">
           <template #default="{ describedby }">
@@ -184,11 +187,24 @@ async function removeLesson() {
   </AppDialog>
 
   <ConfirmDialog
+    v-model:open="confirmCancelOpen"
+    title="将这节课程标记为请假？"
+    description="课程将记为请假，不计入已完成课时；之后仍可恢复为待上。"
+    confirm-label="确认请假"
+    tone="primary"
+    :pending="statusUpdating === '请假'"
+    :error="error"
+    pending-label="处理中…"
+    @confirm="updateStatus('请假')"
+  />
+
+  <ConfirmDialog
     v-model:open="confirmDeleteOpen"
     title="删除这节课程？"
     :description="`${studentName} · ${lesson?.date ?? ''}，删除后不可撤销。`"
     confirm-label="删除课程"
     :pending="deleting"
+    :error="error"
     pending-label="删除中…"
     @confirm="removeLesson"
   />

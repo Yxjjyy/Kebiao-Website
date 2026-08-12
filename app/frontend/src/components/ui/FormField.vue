@@ -24,7 +24,7 @@ const errorId = computed(() => `${props.forId}-${instanceId}-error`)
       <span>{{ label }}</span>
       <span v-if="required" class="text-[9px] font-bold text-[var(--accent)]">必填</span>
     </label>
-    <slot :describedby="[hint ? hintId : '', error ? errorId : ''].filter(Boolean).join(' ')" />
+    <slot :describedby="[hint && !error ? hintId : '', error ? errorId : ''].filter(Boolean).join(' ')" />
     <p v-if="hint && !error" :id="hintId" class="mt-1.5 text-[10px] leading-4 text-[var(--text-dim)]">
       {{ hint }}
     </p>

@@ -400,6 +400,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .fab-create { transition: transform .18s ease, box-shadow .18s ease; }
 .fab-create:active { transform: scale(.94); }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001s !important;
+  }
+}
+
 /* ===== Fallback ===== */
 @supports not (backdrop-filter: blur(1px)) {
   .glass, .glass-strong, .glass-sidebar {

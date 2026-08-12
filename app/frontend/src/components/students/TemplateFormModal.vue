@@ -71,5 +71,5 @@ async function removeTemplate() {
       <div class="md:col-span-2 flex flex-wrap gap-2"><AsyncButton :pending="saving" :disabled="busy" pending-label="保存中…">{{ mode === 'create' ? '保存模板' : '保存修改' }}</AsyncButton><button v-if="mode === 'edit'" type="button" data-action="delete-template" class="btn-danger" :disabled="busy" @click="confirmDeleteOpen = true">删除模板</button></div>
     </form>
   </AppDialog>
-  <ConfirmDialog v-model:open="confirmDeleteOpen" title="删除这个课程模板？" description="删除模板后将取消所有未来待上课时，此操作不可撤销。" confirm-label="删除模板" :pending="deleting" pending-label="删除中…" @confirm="removeTemplate" />
+  <ConfirmDialog v-model:open="confirmDeleteOpen" title="删除这个课程模板？" description="删除模板后将取消所有未来待上课时，此操作不可撤销。" confirm-label="删除模板" :pending="deleting" :error="error" pending-label="删除中…" @confirm="removeTemplate" />
 </template>

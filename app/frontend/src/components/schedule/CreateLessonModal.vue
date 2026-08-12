@@ -106,6 +106,7 @@ async function createLesson() {
         v-model:start-time="form.start_time"
         v-model:duration-hours="form.duration_hours"
         id-prefix="create-lesson"
+        :disabled="submitting"
       />
 
       <FormField for-id="create-lesson-note" label="备注" hint="可选，记录补课原因或课堂重点">

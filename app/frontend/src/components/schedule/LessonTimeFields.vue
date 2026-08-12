@@ -9,11 +9,13 @@ withDefaults(defineProps<{
   timeLabel?: string
   durationLabel?: string
   idPrefix?: string
+  disabled?: boolean
 }>(), {
   dateLabel: '日期',
   timeLabel: '开始时间',
   durationLabel: '课时',
   idPrefix: 'lesson',
+  disabled: false,
 })
 
 const emit = defineEmits<{
@@ -33,6 +35,7 @@ const emit = defineEmits<{
           class="input"
           type="date"
           required
+          :disabled="disabled"
           :value="date"
           :aria-describedby="describedby || undefined"
           @input="emit('update:date', ($event.target as HTMLInputElement).value)"
@@ -47,6 +50,7 @@ const emit = defineEmits<{
           class="input"
           type="time"
           required
+          :disabled="disabled"
           :value="startTime"
           :aria-describedby="describedby || undefined"
           @input="emit('update:startTime', ($event.target as HTMLInputElement).value)"
@@ -59,6 +63,7 @@ const emit = defineEmits<{
           :id="`${idPrefix}-duration`"
           data-field="lesson-duration"
           class="input"
+          :disabled="disabled"
           :value="durationHours"
           :aria-describedby="describedby || undefined"
           @change="emit('update:durationHours', Number(($event.target as HTMLSelectElement).value))"

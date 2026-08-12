@@ -72,7 +72,9 @@ const scheduleError = ref('')
 const bulkSelectedIds = ref<number[]>([])
 type PendingDangerAction =
   | { kind: 'lesson-delete'; lesson: Lesson }
+  | { kind: 'lesson-cancel'; lesson: Lesson }
   | { kind: 'bulk-delete'; lessonIds: number[] }
+  | { kind: 'bulk-cancel'; lessonIds: number[] }
   | null
 const pendingDangerAction = ref<PendingDangerAction>(null)
 const dangerSubmitting = ref(false)
@@ -369,8 +371,11 @@ function toggleBulkLesson(lesson: Lesson) {
 
 async function runBulkAction(action: 'complete' | 'cancel' | 'restore' | 'delete') {
   if (!bulkSelectedIds.value.length) return
-  if (action === 'delete') {
-    pendingDangerAction.value = { kind: 'bulk-delete', lessonIds: [...bulkSelectedIds.value] }
+  if (action === 'delete' || action === 'cancel') {
+    pendingDangerAction.value = {
+      kind: action === 'delete' ? 'bulk-delete' : 'bulk-cancel',
+      lessonIds: [...bulkSelectedIds.value],
+    }
     return
   }
   scheduleError.value = ''
@@ -438,12 +443,8 @@ async function handleQuickRestore(lesson: Lesson) {
   } catch { scheduleError.value = '操作失败' }
 }
 
-async function handleQuickCancel(lesson: Lesson) {
-  try {
-    await lessonsApi.cancel(lesson.id)
-    mobileActionLesson.value = null
-    await loadDashboard()
-  } catch { scheduleError.value = '操作失败' }
+function handleQuickCancel(lesson: Lesson) {
+  pendingDangerAction.value = { kind: 'lesson-cancel', lesson }
 }
 
 function handleQuickReschedule(lesson: Lesson) {
@@ -465,16 +466,20 @@ async function confirmDangerAction() {
     if (action.kind === 'lesson-delete') {
       await lessonsApi.remove(action.lesson.id)
       mobileActionLesson.value = null
+    } else if (action.kind === 'lesson-cancel') {
+      await lessonsApi.cancel(action.lesson.id)
+      mobileActionLesson.value = null
     } else {
-      await lessonsApi.bulk({ ids: action.lessonIds, action: 'delete' })
+      await lessonsApi.bulk({ ids: action.lessonIds, action: action.kind === 'bulk-delete' ? 'delete' : 'cancel' })
       bulkSelectedIds.value = []
     }
     pendingDangerAction.value = null
     await loadDashboard()
   } catch {
-    scheduleError.value = action.kind === 'lesson-delete'
-      ? '删除失败，请稍后重试'
-      : '批量删除失败，请检查所选课时后重试'
+    scheduleError.value = action.kind === 'lesson-delete' ? '删除失败，请稍后重试'
+      : action.kind === 'lesson-cancel' ? '请假操作失败，请稍后重试'
+        : action.kind === 'bulk-delete' ? '批量删除失败，请检查所选课时后重试'
+          : '批量请假失败，请检查所选课时后重试'
   } finally {
     dangerSubmitting.value = false
   }
@@ -723,11 +728,18 @@ onMounted(async () => {
 
       <ConfirmDialog
         :open="Boolean(pendingDangerAction)"
-        :title="pendingDangerAction?.kind === 'bulk-delete' ? '批量删除课程？' : '删除这节课程？'"
+        :title="pendingDangerAction?.kind === 'bulk-delete' ? '批量删除课程？'
+          : pendingDangerAction?.kind === 'bulk-cancel' ? '批量标记请假？'
+            : pendingDangerAction?.kind === 'lesson-cancel' ? '将这节课程标记为请假？' : '删除这节课程？'"
         :description="pendingDangerAction?.kind === 'bulk-delete'
           ? `将永久删除所选 ${pendingDangerAction.lessonIds.length} 节课程，此操作不可撤销。`
-          : `将永久删除 ${pendingDangerAction?.lesson.student?.name ?? '所选学生'} 的这节课程，此操作不可撤销。`"
-        confirm-label="确认删除"
+          : pendingDangerAction?.kind === 'bulk-cancel'
+            ? `将所选 ${pendingDangerAction.lessonIds.length} 节课程标记为请假，不计入已完成课时。`
+            : pendingDangerAction?.kind === 'lesson-cancel'
+              ? `将 ${pendingDangerAction.lesson.student?.name ?? '所选学生'} 的这节课程标记为请假，之后仍可恢复。`
+              : `将永久删除 ${pendingDangerAction?.lesson.student?.name ?? '所选学生'} 的这节课程，此操作不可撤销。`"
+        :confirm-label="pendingDangerAction?.kind === 'lesson-cancel' || pendingDangerAction?.kind === 'bulk-cancel' ? '确认请假' : '确认删除'"
+        :tone="pendingDangerAction?.kind === 'lesson-cancel' || pendingDangerAction?.kind === 'bulk-cancel' ? 'primary' : 'danger'"
         :pending="dangerSubmitting"
         pending-label="删除中…"
         @update:open="!$event && (pendingDangerAction = null)"
