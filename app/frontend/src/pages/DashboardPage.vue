@@ -19,6 +19,7 @@ import TemplateManager from '@/components/students/TemplateManager.vue'
 import StudentsPanel from '@/components/students/StudentsPanel.vue'
 import StudentFormModal from '@/components/students/StudentFormModal.vue'
 import TemplateFormModal from '@/components/students/TemplateFormModal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { exportApi } from '@/api/export'
 import { lessonsApi } from '@/api/lessons'
 import { statsApi } from '@/api/stats'
@@ -69,6 +70,12 @@ const leaveItems = ref<LeaveItem[]>([])
 const quickCreate = ref<{ date: string; start_time: string } | null>(null)
 const scheduleError = ref('')
 const bulkSelectedIds = ref<number[]>([])
+type PendingDangerAction =
+  | { kind: 'lesson-delete'; lesson: Lesson }
+  | { kind: 'bulk-delete'; lessonIds: number[] }
+  | null
+const pendingDangerAction = ref<PendingDangerAction>(null)
+const dangerSubmitting = ref(false)
 const weekOffset = ref(0)
 const refreshKey = ref(0)
 const viewMode = ref<'week' | 'month' | 'day'>('week')
@@ -362,6 +369,10 @@ function toggleBulkLesson(lesson: Lesson) {
 
 async function runBulkAction(action: 'complete' | 'cancel' | 'restore' | 'delete') {
   if (!bulkSelectedIds.value.length) return
+  if (action === 'delete') {
+    pendingDangerAction.value = { kind: 'bulk-delete', lessonIds: [...bulkSelectedIds.value] }
+    return
+  }
   scheduleError.value = ''
   try {
     await lessonsApi.bulk({ ids: bulkSelectedIds.value, action })
@@ -441,13 +452,32 @@ function handleQuickReschedule(lesson: Lesson) {
   handleOpenReschedule()
 }
 
-async function handleQuickDelete(lesson: Lesson) {
-  if (!window.confirm('确定删除该课时？')) return
+function handleQuickDelete(lesson: Lesson) {
+  pendingDangerAction.value = { kind: 'lesson-delete', lesson }
+}
+
+async function confirmDangerAction() {
+  const action = pendingDangerAction.value
+  if (!action || dangerSubmitting.value) return
+  dangerSubmitting.value = true
+  scheduleError.value = ''
   try {
-    await lessonsApi.remove(lesson.id)
-    mobileActionLesson.value = null
+    if (action.kind === 'lesson-delete') {
+      await lessonsApi.remove(action.lesson.id)
+      mobileActionLesson.value = null
+    } else {
+      await lessonsApi.bulk({ ids: action.lessonIds, action: 'delete' })
+      bulkSelectedIds.value = []
+    }
+    pendingDangerAction.value = null
     await loadDashboard()
-  } catch { scheduleError.value = '删除失败' }
+  } catch {
+    scheduleError.value = action.kind === 'lesson-delete'
+      ? '删除失败，请稍后重试'
+      : '批量删除失败，请检查所选课时后重试'
+  } finally {
+    dangerSubmitting.value = false
+  }
 }
 
 function handleMobileEdit(lesson: Lesson) {
@@ -573,7 +603,7 @@ onMounted(async () => {
           <button class="btn-ghost btn-sm" @click="runBulkAction('complete')">批量完成</button>
           <button class="btn-ghost btn-sm" @click="runBulkAction('cancel')">批量请假</button>
           <button class="btn-ghost btn-sm" @click="runBulkAction('restore')">批量恢复</button>
-          <button class="btn-danger btn-sm" @click="runBulkAction('delete')">批量删除</button>
+          <button data-action="bulk-delete" class="btn-danger btn-sm" @click="runBulkAction('delete')">批量删除</button>
           <button class="btn-ghost btn-sm" @click="bulkSelectedIds = []">清空</button>
         </div>
       </div>
@@ -689,6 +719,19 @@ onMounted(async () => {
         :visible="showRescheduleMode"
         @close="showRescheduleMode = false; pendingMovePayload = null"
         @select="handleRescheduleMode"
+      />
+
+      <ConfirmDialog
+        :open="Boolean(pendingDangerAction)"
+        :title="pendingDangerAction?.kind === 'bulk-delete' ? '批量删除课程？' : '删除这节课程？'"
+        :description="pendingDangerAction?.kind === 'bulk-delete'
+          ? `将永久删除所选 ${pendingDangerAction.lessonIds.length} 节课程，此操作不可撤销。`
+          : `将永久删除 ${pendingDangerAction?.lesson.student?.name ?? '所选学生'} 的这节课程，此操作不可撤销。`"
+        confirm-label="确认删除"
+        :pending="dangerSubmitting"
+        pending-label="删除中…"
+        @update:open="!$event && (pendingDangerAction = null)"
+        @confirm="confirmDangerAction"
       />
     </section>
 
