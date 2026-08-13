@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Student, Template } from '@/api/types'
+import type { AppError } from '@/api/error'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import { formatHours } from '@/lib/format'
 import { formatRepeatInterval, sortTemplates } from '@/lib/studentWorkspace'
 
@@ -9,10 +11,10 @@ const props = withDefaults(defineProps<{
   selectedStudentId: number | null
   templates: Template[]
   loading?: boolean
-  error?: string
+  error?: AppError | null
 }>(), {
   loading: false,
-  error: '',
+  error: null,
 })
 
 const emit = defineEmits<{
@@ -43,14 +45,10 @@ const sortedTemplates = computed(() => sortTemplates(props.templates))
       </button>
     </header>
 
-    <div v-if="loading" class="mt-4 grid animate-pulse gap-2.5 md:grid-cols-2 xl:grid-cols-3">
-      <span v-for="index in 3" :key="index" class="h-28 rounded-[20px] bg-white/45 dark:bg-white/5" />
-    </div>
+    <ErrorNotice v-if="error" class="mt-4" :error="error" @retry="emit('retry')" />
 
-    <div v-else-if="error" class="mt-4 rounded-[20px] border border-red-500/15 bg-red-500/5 px-4 py-6 text-center">
-      <p class="text-sm font-semibold">{{ error }}</p>
-      <p class="mt-1 text-xs text-[var(--text-dim)]">学生详情不受影响，可以单独重试。</p>
-      <button data-action="retry-templates" class="btn-ghost btn-sm mt-3" @click="emit('retry')">重新加载</button>
+    <div v-if="loading && !templates.length" class="mt-4 grid animate-pulse gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+      <span v-for="index in 3" :key="index" class="h-28 rounded-[20px] bg-white/45 dark:bg-white/5" />
     </div>
 
     <div v-else-if="!selectedStudent" class="mt-4 rounded-[20px] border border-dashed border-[var(--line)] px-4 py-8 text-center">

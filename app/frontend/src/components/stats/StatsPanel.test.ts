@@ -64,7 +64,11 @@ const baseProps = {
   statsPeriodLabel: '7月1日 — 7月7日',
   isCurrentPeriod: true,
   loading: false,
-  error: '',
+  error: null,
+}
+
+const retryableError = {
+  kind: 'network' as const, message: '统计数据加载失败', requestId: 'req-stats', retryable: true,
 }
 
 describe('StatsPanel', () => {
@@ -93,11 +97,11 @@ describe('StatsPanel', () => {
 
   it('offers retry when loading statistics fails', async () => {
     const wrapper = mount(StatsPanel, {
-      props: { ...baseProps, range: null, error: '统计数据加载失败' },
+      props: { ...baseProps, range: null, error: retryableError },
     })
 
     expect(wrapper.text()).toContain('统计数据加载失败')
-    await wrapper.get('[data-action="retry-stats"]').trigger('click')
+    await wrapper.get('[data-action="retry-error"]').trigger('click')
     expect(wrapper.emitted('retry')).toHaveLength(1)
   })
 })

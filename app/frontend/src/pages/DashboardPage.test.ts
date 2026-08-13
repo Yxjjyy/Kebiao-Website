@@ -2,11 +2,13 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CanceledError } from 'axios'
 import StudentOverview from '@/components/students/StudentOverview.vue'
 import StudentsPanel from '@/components/students/StudentsPanel.vue'
 import TemplateManager from '@/components/students/TemplateManager.vue'
 import StatsPanel from '@/components/stats/StatsPanel.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import ScheduleBoard from '@/components/schedule/ScheduleBoard.vue'
 import DashboardPage from './DashboardPage.vue'
 
@@ -192,7 +194,9 @@ describe('DashboardPage loading failures', () => {
 
     const { wrapper } = await mountDashboard()
 
-    expect(wrapper.text()).toContain('数据加载失败，请检查网络后重试')
+    expect(wrapper.getComponent(ErrorNotice).props('error')).toMatchObject({
+      message: '数据加载失败，请检查网络后重试',
+    })
   })
 })
 
@@ -217,8 +221,66 @@ describe('DashboardPage student workspace', () => {
 
     const { wrapper } = await mountDashboard('/students')
 
-    expect(wrapper.getComponent(StudentOverview).props('error')).toBe('学生详情加载失败')
-    expect(wrapper.getComponent(TemplateManager).props('error')).toBe('模板加载失败')
+    expect(wrapper.getComponent(StudentOverview).props('error')).toMatchObject({ message: '学生详情加载失败' })
+    expect(wrapper.getComponent(TemplateManager).props('error')).toMatchObject({ message: '模板加载失败' })
+  })
+
+  it('ignores a stale lesson response after the displayed week changes', async () => {
+    let resolveFirst!: (value: unknown[]) => void
+    apiMocks.lessonsList
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+      .mockResolvedValueOnce([{ id: 22, date: '2026-08-20' }])
+    const { wrapper } = await mountDashboard()
+
+    await wrapper.get('[data-action="next-period"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(ScheduleBoard).props('lessons')).toEqual([{ id: 22, date: '2026-08-20' }])
+
+    resolveFirst([{ id: 11, date: '2026-08-10' }])
+    await flushPromises()
+    expect(wrapper.getComponent(ScheduleBoard).props('lessons')).toEqual([{ id: 22, date: '2026-08-20' }])
+  })
+
+  it('treats canceled dashboard loading as silent control flow', async () => {
+    apiMocks.lessonsList.mockRejectedValueOnce(new CanceledError())
+    const { wrapper } = await mountDashboard()
+
+    expect(wrapper.findComponent(ErrorNotice).exists()).toBe(false)
+  })
+
+  it('retains successful student detail and templates when refreshes fail', async () => {
+    apiMocks.templatesList.mockResolvedValueOnce([{ id: 9, student_id: 1, day_of_week: 1 }])
+    const { wrapper } = await mountDashboard('/students')
+    const detailBefore = wrapper.getComponent(StudentOverview).props('student')
+    const templatesBefore = wrapper.getComponent(TemplateManager).props('templates')
+    apiMocks.studentGet.mockRejectedValueOnce(new Error('detail refresh failed'))
+    apiMocks.templatesList.mockRejectedValueOnce(new Error('template refresh failed'))
+
+    wrapper.getComponent(StudentOverview).vm.$emit('retry')
+    wrapper.getComponent(TemplateManager).vm.$emit('retry')
+    await flushPromises()
+
+    expect(wrapper.getComponent(StudentOverview).props('student')).toEqual(detailBefore)
+    expect(wrapper.getComponent(TemplateManager).props('templates')).toEqual(templatesBefore)
+    expect(wrapper.getComponent(StudentOverview).props('error')).toMatchObject({ message: '学生详情加载失败' })
+    expect(wrapper.getComponent(TemplateManager).props('error')).toMatchObject({ message: '模板加载失败' })
+  })
+
+  it('ignores an older refresh for the same student', async () => {
+    const { wrapper } = await mountDashboard('/students')
+    let resolveOlder!: (value: unknown) => void
+    apiMocks.studentGet
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOlder = resolve }))
+      .mockResolvedValueOnce({ ...studentDetail(1), note: 'newest' })
+
+    wrapper.getComponent(StudentOverview).vm.$emit('retry')
+    wrapper.getComponent(StudentOverview).vm.$emit('retry')
+    await flushPromises()
+    expect(wrapper.getComponent(StudentOverview).props('student')).toMatchObject({ note: 'newest' })
+
+    resolveOlder({ ...studentDetail(1), note: 'stale' })
+    await flushPromises()
+    expect(wrapper.getComponent(StudentOverview).props('student')).toMatchObject({ note: 'newest' })
   })
 })
 
@@ -248,13 +310,13 @@ describe('DashboardPage statistics workspace', () => {
     apiMocks.statsRange.mockRejectedValueOnce(new Error('stats unavailable'))
     const { wrapper } = await mountDashboard('/stats')
 
-    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('统计数据加载失败，请稍后重试')
+    expect(wrapper.getComponent(StatsPanel).props('error')).toMatchObject({ message: '统计数据加载失败，请稍后重试' })
 
     wrapper.getComponent(StatsPanel).vm.$emit('retry')
     await flushPromises()
 
     expect(apiMocks.statsRange).toHaveBeenCalledTimes(2)
-    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('')
+    expect(wrapper.getComponent(StatsPanel).props('error')).toBeNull()
   })
 
   it('opens a contribution student in the student workspace and preserves the route selection', async () => {
@@ -304,7 +366,7 @@ describe('DashboardPage statistics workspace', () => {
     await flushPromises()
 
     expect(wrapper.getComponent(StatsPanel).props('range')).toMatchObject({ total_income: 800 })
-    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('统计数据加载失败，请稍后重试')
+    expect(wrapper.getComponent(StatsPanel).props('error')).toMatchObject({ message: '统计数据加载失败，请稍后重试' })
   })
 
   it('reports export failures without creating a download', async () => {
@@ -314,6 +376,6 @@ describe('DashboardPage statistics workspace', () => {
     wrapper.getComponent(StatsPanel).vm.$emit('export-range')
     await flushPromises()
 
-    expect(wrapper.getComponent(StatsPanel).props('error')).toBe('报表导出失败，请稍后重试')
+    expect(wrapper.getComponent(StatsPanel).props('error')).toMatchObject({ message: '报表导出失败，请稍后重试' })
   })
 })

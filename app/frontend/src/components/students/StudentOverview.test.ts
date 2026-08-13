@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type { StudentDetail } from '@/api/types'
 import StudentOverview from './StudentOverview.vue'
 
+const retryableError = {
+  kind: 'network' as const, message: '学生详情加载失败', requestId: 'req-student', retryable: true,
+}
+
 const student = {
   id: 1,
   name: '林沐',
@@ -25,7 +29,7 @@ const student = {
 describe('StudentOverview', () => {
   it('renders identity, contact details and monthly metrics', () => {
     const wrapper = mount(StudentOverview, {
-      props: { student, loading: false, error: '', currencySymbol: '¥' },
+      props: { student, loading: false, error: null, currencySymbol: '¥' },
     })
     const text = wrapper.text()
 
@@ -44,7 +48,7 @@ describe('StudentOverview', () => {
       props: {
         student: { ...student, phone: null, note: null },
         loading: false,
-        error: '',
+        error: null,
         currencySymbol: '¥',
       },
     })
@@ -55,16 +59,16 @@ describe('StudentOverview', () => {
 
   it('emits retry from the local error state', async () => {
     const wrapper = mount(StudentOverview, {
-      props: { student: null, loading: false, error: '学生详情加载失败', currencySymbol: '¥' },
+      props: { student: null, loading: false, error: retryableError, currencySymbol: '¥' },
     })
 
-    await wrapper.get('[data-action="retry-student-detail"]').trigger('click')
+    await wrapper.get('[data-action="retry-error"]').trigger('click')
     expect(wrapper.emitted('retry')).toHaveLength(1)
   })
 
   it('emits edit with the student id', async () => {
     const wrapper = mount(StudentOverview, {
-      props: { student, loading: false, error: '', currencySymbol: '¥' },
+      props: { student, loading: false, error: null, currencySymbol: '¥' },
     })
 
     await wrapper.get('[data-action="edit-student"]').trigger('click')

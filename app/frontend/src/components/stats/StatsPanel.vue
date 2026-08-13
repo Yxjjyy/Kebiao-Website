@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { ComparisonStats, LeaveItem, RangeStats, StudentStatsRow, TodayStats } from '@/api/types'
+import type { AppError } from '@/api/error'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import AttentionList from './AttentionList.vue'
 import StatsMetricGrid from './StatsMetricGrid.vue'
 import StatsTrendChart from './StatsTrendChart.vue'
@@ -17,7 +19,7 @@ defineProps<{
   statsPeriodLabel: string
   isCurrentPeriod: boolean
   loading?: boolean
-  error?: string
+  error?: AppError | null
 }>()
 
 const emit = defineEmits<{
@@ -103,19 +105,7 @@ const ranges = [
       </div>
     </header>
 
-    <div
-      v-if="error"
-      role="alert"
-      class="flex items-center justify-between gap-4 rounded-2xl border border-rose-500/20 bg-rose-500/8 px-4 py-3"
-    >
-      <div class="min-w-0">
-        <p class="text-xs font-bold text-rose-700 dark:text-rose-300">统计数据加载失败</p>
-        <p class="mt-0.5 truncate text-[10px] text-[var(--text-dim)]">{{ error }}</p>
-      </div>
-      <button type="button" data-action="retry-stats" class="shrink-0 text-[11px] font-extrabold text-rose-700 hover:underline dark:text-rose-300" @click="emit('retry')">
-        重新加载
-      </button>
-    </div>
+    <ErrorNotice v-if="error" :error="error" @retry="emit('retry')" />
 
     <div v-if="loading && !range" data-testid="stats-skeleton" class="space-y-3" aria-label="正在加载统计数据">
       <div class="grid grid-cols-2 gap-2.5 lg:grid-cols-4">

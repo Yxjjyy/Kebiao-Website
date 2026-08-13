@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { StudentDetail } from '@/api/types'
+import type { AppError } from '@/api/error'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import { formatCurrency, formatHours } from '@/lib/format'
 
 defineProps<{
   student: StudentDetail | null
   loading: boolean
-  error: string
+  error: AppError | null
   currencySymbol: string
 }>()
 
@@ -17,7 +19,9 @@ const emit = defineEmits<{
 
 <template>
   <section class="glass-strong overflow-hidden p-4 md:p-5">
-    <div v-if="loading" class="animate-pulse">
+    <ErrorNotice v-if="error" class="mb-4" :error="error" @retry="emit('retry')" />
+
+    <div v-if="loading && !student" class="animate-pulse">
       <div class="flex items-center gap-3">
         <span class="h-14 w-14 rounded-[20px] bg-[var(--accent-soft)]" />
         <div class="space-y-2">
@@ -28,13 +32,6 @@ const emit = defineEmits<{
       <div class="mt-5 grid grid-cols-2 gap-2.5 md:grid-cols-5">
         <span v-for="index in 5" :key="index" class="h-20 rounded-[18px] bg-white/45 dark:bg-white/5" />
       </div>
-    </div>
-
-    <div v-else-if="error" class="flex min-h-48 flex-col items-center justify-center text-center">
-      <span class="grid h-11 w-11 place-items-center rounded-2xl bg-red-500/10 text-red-500">!</span>
-      <p class="mt-3 text-sm font-semibold">{{ error }}</p>
-      <p class="mt-1 text-xs text-[var(--text-dim)]">学生目录仍可使用，你可以重新加载详情。</p>
-      <button data-action="retry-student-detail" class="btn-ghost btn-sm mt-3" @click="emit('retry')">重新加载</button>
     </div>
 
     <div v-else-if="!student" class="flex min-h-48 flex-col items-center justify-center text-center">

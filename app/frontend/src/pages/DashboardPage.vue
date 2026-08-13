@@ -20,6 +20,9 @@ import StudentsPanel from '@/components/students/StudentsPanel.vue'
 import StudentFormModal from '@/components/students/StudentFormModal.vue'
 import TemplateFormModal from '@/components/students/TemplateFormModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import ErrorNotice from '@/components/ui/ErrorNotice.vue'
+import { isCancel } from 'axios'
+import { toAppError, type AppError } from '@/api/error'
 import { exportApi } from '@/api/export'
 import { lessonsApi } from '@/api/lessons'
 import { statsApi } from '@/api/stats'
@@ -47,7 +50,9 @@ const router = useRouter()
 const activeTab = ref<string>('schedule')
 const loading = ref(false)
 const statsLoading = ref(false)
-const statsError = ref('')
+const statsError = ref<AppError | null>(null)
+const dashboardError = ref<AppError | null>(null)
+let dashboardRequestId = 0
 let statsRequestId = 0
 
 const lessons = ref<Lesson[]>([])
@@ -59,9 +64,11 @@ const ranking = ref<StudentStatsRow[]>([])
 const templates = ref<Template[]>([])
 const selectedStudentDetail = ref<StudentDetail | null>(null)
 const studentDetailLoading = ref(false)
-const studentDetailError = ref('')
+const studentDetailError = ref<AppError | null>(null)
+let studentDetailRequestId = 0
 const templatesLoading = ref(false)
-const templatesError = ref('')
+const templatesError = ref<AppError | null>(null)
+let templatesRequestId = 0
 const selectedLesson = ref<Lesson | null>(null)
 const selectedStudentId = ref<number | null>(null)
 const statRange = ref<'today' | 'week' | 'month'>('month')
@@ -127,6 +134,13 @@ const statsPeriodLabel = computed(() => {
 
 const isCurrentStatsPeriod = computed(() => statsOffset.value === 0 && statRange.value !== 'today')
 
+function loadError(error: unknown, fallback: string): AppError {
+  const parsed = toAppError(error)
+  return parsed.kind === 'unknown'
+    ? { ...parsed, message: fallback, retryable: true }
+    : parsed
+}
+
 function tabFromPath(path: string): 'schedule' | 'students' | 'stats' | 'settings' {
   if (path.startsWith('/students')) return 'students'
   if (path.startsWith('/stats')) return 'stats'
@@ -186,8 +200,9 @@ function getStatsRange(offset = 0) {
 }
 
 async function loadDashboard() {
+  const requestId = ++dashboardRequestId
   loading.value = true
-  scheduleError.value = ''
+  dashboardError.value = null
   try {
     const week = getWeekRange(currentWeekStart.value, (settingsStore.settings.week_start as 0 | 1) ?? 1)
     const [lessonRows, studentRows, today] = await Promise.all([
@@ -195,6 +210,7 @@ async function loadDashboard() {
       studentsApi.list(false),
       statsApi.today(),
     ])
+    if (requestId !== dashboardRequestId) return
     lessons.value = lessonRows
     students.value = studentRows
     todayStats.value = today
@@ -203,10 +219,12 @@ async function loadDashboard() {
       : selectedStudentId.value
     selectedStudentId.value = normalizeSelectedStudentId(studentRows, requestedStudentId)
     refreshKey.value++
-  } catch {
-    scheduleError.value = '数据加载失败，请检查网络后重试'
+  } catch (error) {
+    if (requestId === dashboardRequestId && !isCancel(error)) {
+      dashboardError.value = loadError(error, '数据加载失败，请检查网络后重试')
+    }
   } finally {
-    loading.value = false
+    if (requestId === dashboardRequestId) loading.value = false
   }
 }
 
@@ -217,7 +235,7 @@ async function loadStatistics() {
   const to = toIsoDate(selectedRange.end)
   const period = statRange.value === 'today' ? 'day' : statRange.value
   statsLoading.value = true
-  statsError.value = ''
+  statsError.value = null
   try {
     const [range, comparison, studentRanking, leaveRows] = await Promise.all([
       statsApi.range(from, to, selectedRange.granularity),
@@ -230,9 +248,9 @@ async function loadStatistics() {
     comparisonStats.value = comparison
     ranking.value = studentRanking
     leaveItems.value = leaveRows
-  } catch {
-    if (requestId === statsRequestId) {
-      statsError.value = '统计数据加载失败，请稍后重试'
+  } catch (error) {
+    if (requestId === statsRequestId && !isCancel(error)) {
+      statsError.value = loadError(error, '统计数据加载失败，请稍后重试')
     }
   } finally {
     if (requestId === statsRequestId) {
@@ -242,54 +260,54 @@ async function loadStatistics() {
 }
 
 async function loadStudentDetail() {
+  const requestId = ++studentDetailRequestId
   if (!selectedStudentId.value) {
     selectedStudentDetail.value = null
-    studentDetailError.value = ''
+    studentDetailError.value = null
     studentDetailLoading.value = false
     return
   }
   const studentId = selectedStudentId.value
   studentDetailLoading.value = true
-  studentDetailError.value = ''
+  studentDetailError.value = null
   try {
     const detail = await studentsApi.get(studentId)
-    if (selectedStudentId.value === studentId) {
+    if (requestId === studentDetailRequestId && selectedStudentId.value === studentId) {
       selectedStudentDetail.value = detail
     }
-  } catch {
-    if (selectedStudentId.value === studentId) {
-      selectedStudentDetail.value = null
-      studentDetailError.value = '学生详情加载失败'
+  } catch (error) {
+    if (requestId === studentDetailRequestId && selectedStudentId.value === studentId && !isCancel(error)) {
+      studentDetailError.value = loadError(error, '学生详情加载失败')
     }
   } finally {
-    if (selectedStudentId.value === studentId) {
+    if (requestId === studentDetailRequestId && selectedStudentId.value === studentId) {
       studentDetailLoading.value = false
     }
   }
 }
 
 async function loadTemplates() {
+  const requestId = ++templatesRequestId
   if (!selectedStudentId.value) {
     templates.value = []
-    templatesError.value = ''
+    templatesError.value = null
     templatesLoading.value = false
     return
   }
   const studentId = selectedStudentId.value
   templatesLoading.value = true
-  templatesError.value = ''
+  templatesError.value = null
   try {
     const rows = await templatesApi.list(studentId)
-    if (selectedStudentId.value === studentId) {
+    if (requestId === templatesRequestId && selectedStudentId.value === studentId) {
       templates.value = rows
     }
-  } catch {
-    if (selectedStudentId.value === studentId) {
-      templates.value = []
-      templatesError.value = '模板加载失败'
+  } catch (error) {
+    if (requestId === templatesRequestId && selectedStudentId.value === studentId && !isCancel(error)) {
+      templatesError.value = loadError(error, '模板加载失败')
     }
   } finally {
-    if (selectedStudentId.value === studentId) {
+    if (requestId === templatesRequestId && selectedStudentId.value === studentId) {
       templatesLoading.value = false
     }
   }
@@ -305,7 +323,7 @@ async function refreshStudentWorkspace() {
 }
 
 async function downloadMonthReport() {
-  statsError.value = ''
+  statsError.value = null
   try {
     const range = getStatsRange(statsOffset.value)
     const blob = await exportApi.downloadXlsx(toIsoDate(range.start), toIsoDate(range.end))
@@ -317,8 +335,8 @@ async function downloadMonthReport() {
     link.click()
     link.remove()
     URL.revokeObjectURL(url)
-  } catch {
-    statsError.value = '报表导出失败，请稍后重试'
+  } catch (error) {
+    if (!isCancel(error)) statsError.value = loadError(error, '报表导出失败，请稍后重试')
   }
 }
 
@@ -568,13 +586,13 @@ onMounted(async () => {
 
       <div class="glass-strong sticky top-2 z-30 flex flex-wrap items-center justify-between gap-3 !rounded-2xl px-2.5 py-2">
         <div class="flex items-center gap-2">
-          <button class="btn-ghost btn-sm !px-2" @click="viewMode === 'day' ? handlePrevDay() : viewMode === 'month' ? handlePrevMonth() : prevWeek()">
+          <button data-action="previous-period" class="btn-ghost btn-sm !px-2" @click="viewMode === 'day' ? handlePrevDay() : viewMode === 'month' ? handlePrevMonth() : prevWeek()">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
           </button>
           <button class="btn-ghost btn-sm !px-2" @click="goToToday">
             <span class="text-xs font-semibold">今天</span>
           </button>
-          <button class="btn-ghost btn-sm !px-2" @click="viewMode === 'day' ? handleNextDay() : viewMode === 'month' ? handleNextMonth() : nextWeek()">
+          <button data-action="next-period" class="btn-ghost btn-sm !px-2" @click="viewMode === 'day' ? handleNextDay() : viewMode === 'month' ? handleNextMonth() : nextWeek()">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
           </button>
           <span v-if="viewMode === 'week'" class="text-xs font-semibold sm:text-sm">{{ weekRangeLabel }}</span>
@@ -594,6 +612,8 @@ onMounted(async () => {
           <button class="btn-primary btn-sm hidden sm:flex" @click="downloadMonthReport">导出 Excel</button>
         </div>
       </div>
+
+      <ErrorNotice v-if="dashboardError" :error="dashboardError" @retry="loadDashboard" />
 
       <p v-if="scheduleError" class="rounded-2xl bg-red-500/10 px-4 py-2.5 text-sm text-red-600 dark:text-red-400">
         {{ scheduleError }}

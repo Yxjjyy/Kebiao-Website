@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type { Student, Template } from '@/api/types'
 import TemplateManager from './TemplateManager.vue'
 
+const retryableError = {
+  kind: 'network' as const, message: '课表模板加载失败', requestId: 'req-template', retryable: true,
+}
+
 const student = {
   id: 1, name: '林沐', color: '#7c3aed', hourly_rate: 300, phone: null,
   note: null, archived: 0, created_at: '', updated_at: '',
@@ -27,7 +31,7 @@ describe('TemplateManager', () => {
         selectedStudentId: 1,
         templates,
         loading: false,
-        error: '',
+        error: null,
       },
     })
 
@@ -46,11 +50,11 @@ describe('TemplateManager', () => {
         selectedStudentId: 1,
         templates: [],
         loading: false,
-        error: '课表模板加载失败',
+        error: retryableError,
       },
     })
 
-    await wrapper.get('[data-action="retry-templates"]').trigger('click')
+    await wrapper.get('[data-action="retry-error"]').trigger('click')
     expect(wrapper.emitted('retry')).toHaveLength(1)
   })
 
@@ -61,7 +65,7 @@ describe('TemplateManager', () => {
         selectedStudentId: 1,
         templates: [],
         loading: false,
-        error: '',
+        error: null,
       },
     })
 
