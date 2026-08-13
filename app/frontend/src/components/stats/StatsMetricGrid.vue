@@ -14,7 +14,6 @@ const metrics = computed(() => {
   const range = props.range
   const denominator = (range?.completed_lessons ?? 0)
     + (range?.pending_lessons ?? 0)
-    + (range?.leave_count ?? 0)
   const incomeGrowth = formatGrowth(props.comparison?.income_growth_pct ?? null)
   const hoursGrowth = formatGrowth(props.comparison?.hours_growth_pct ?? null)
   return [
@@ -42,7 +41,6 @@ const metrics = computed(() => {
       value: `${calculateCompletionRate(
         range?.completed_lessons ?? 0,
         range?.pending_lessons ?? 0,
-        range?.leave_count ?? 0,
       )}%`,
       detail: denominator
         ? `已完成 ${range?.completed_lessons ?? 0} / 共 ${denominator} 节`

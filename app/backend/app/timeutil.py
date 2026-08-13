@@ -5,16 +5,25 @@ from zoneinfo import ZoneInfo
 
 from app.config import get_settings
 
-_settings = get_settings()
-TZ = ZoneInfo(_settings.TIMEZONE)
+def now(
+    timezone_name: str | None = None,
+    *,
+    instant: datetime | None = None,
+) -> datetime:
+    tz = ZoneInfo(timezone_name or get_settings().TIMEZONE)
+    if instant is None:
+        return datetime.now(tz)
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=ZoneInfo("UTC"))
+    return instant.astimezone(tz)
 
 
-def now() -> datetime:
-    return datetime.now(TZ)
-
-
-def today() -> date:
-    return now().date()
+def today(
+    timezone_name: str | None = None,
+    *,
+    instant: datetime | None = None,
+) -> date:
+    return now(timezone_name, instant=instant).date()
 
 
 def parse_date(s: str) -> date:
@@ -44,13 +53,14 @@ def overlaps(a_start_min: int, a_end_min: int, b_start_min: int, b_end_min: int)
     return not (a_end_min <= b_start_min or b_end_min <= a_start_min)
 
 
-def week_start(d: date) -> date:
-    """ISO 周一为周首日。"""
-    return d - timedelta(days=d.weekday())
+def week_start(d: date, week_starts_on: int = 1) -> date:
+    """返回周首日期，week_starts_on 使用 0=周日、1=周一。"""
+    start_weekday = 6 if week_starts_on == 0 else 0
+    return d - timedelta(days=(d.weekday() - start_weekday) % 7)
 
 
-def week_end(d: date) -> date:
-    return week_start(d) + timedelta(days=6)
+def week_end(d: date, week_starts_on: int = 1) -> date:
+    return week_start(d, week_starts_on) + timedelta(days=6)
 
 
 def month_start(d: date) -> date:

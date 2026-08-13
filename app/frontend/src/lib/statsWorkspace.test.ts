@@ -27,9 +27,9 @@ const range: RangeStats = {
 }
 
 describe('statistics workspace helpers', () => {
-  it('calculates completion rate with leave in the denominator', () => {
-    expect(calculateCompletionRate(6, 2, 2)).toBe(60)
-    expect(calculateCompletionRate(0, 0, 0)).toBe(0)
+  it('calculates completion rate from active lessons and handles a zero denominator', () => {
+    expect(calculateCompletionRate(6, 2)).toBe(75)
+    expect(calculateCompletionRate(0, 0)).toBe(0)
   })
 
   it('formats comparable growth without inventing zero-baseline growth', () => {

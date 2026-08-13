@@ -17,6 +17,17 @@ export function getTodayIso() {
   return format(new Date(), 'yyyy-MM-dd')
 }
 
+export function getBusinessTodayIso(timezone: string, instant = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(instant)
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${value.year}-${value.month}-${value.day}`
+}
+
 export function getWeekRange(base = new Date(), weekStartsOn: 0 | 1 = 1) {
   const start = startOfWeek(base, { weekStartsOn })
   const end = endOfWeek(base, { weekStartsOn })

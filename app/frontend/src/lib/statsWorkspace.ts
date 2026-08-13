@@ -5,9 +5,8 @@ export type GrowthTone = 'positive' | 'negative' | 'neutral' | 'muted'
 export function calculateCompletionRate(
   completed: number,
   pending: number,
-  leave: number,
 ): number {
-  const denominator = completed + pending + leave
+  const denominator = completed + pending
   return denominator ? Math.round((completed / denominator) * 100) : 0
 }
 

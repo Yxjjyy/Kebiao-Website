@@ -40,7 +40,7 @@ import type {
   TodayStats,
 } from '@/api/types'
 import { addDays, format } from 'date-fns'
-import { getOffsetMonthRange, getOffsetWeekRange, getWeekRange, toIsoDate } from '@/lib/date'
+import { addDaysIso, getBusinessTodayIso, getOffsetMonthRange, getOffsetWeekRange, getWeekRange, toIsoDate } from '@/lib/date'
 import { normalizeSelectedStudentId } from '@/lib/studentWorkspace'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -114,8 +114,9 @@ const weekRangeLabel = computed(() => {
 const currencySymbol = computed(() => settingsStore.settings.currency_symbol)
 const displayName = computed(() => settingsStore.profile.display_name || '教师')
 const avatarColor = computed(() => settingsStore.profile.avatar_color || '#7c3aed')
+const businessTodayIso = computed(() => getBusinessTodayIso(settingsStore.settings.timezone))
 const todayLessons = computed(() =>
-  todayStats.value?.lessons ?? lessons.value.filter((lesson) => lesson.date === toIsoDate(new Date()))
+  todayStats.value?.lessons ?? lessons.value.filter((lesson) => lesson.date === businessTodayIso.value)
 )
 const statRangeLabel = computed(() =>
   statRange.value === 'today' ? '今日' : statRange.value === 'week' ? '本周' : '本月'
@@ -648,7 +649,7 @@ onMounted(async () => {
           <DayView
             v-else-if="viewMode === 'day'"
             :currency-symbol="currencySymbol"
-            :date-iso="selectedDay || toIsoDate(addDays(new Date(), weekOffset * 7))"
+            :date-iso="selectedDay || addDaysIso(businessTodayIso, weekOffset * 7)"
             :refresh-key="refreshKey"
             :students="students"
             :visible-end="settingsStore.settings.visible_time_end"
