@@ -413,19 +413,19 @@ git commit -m "feat: prevent stale PWA API data"
 - Create: `app/frontend/src/api/contracts.test.ts`
 - Modify: `docs/superpowers/plans/2026-08-13-function-data-stability.md`
 
-- [ ] **Step 1: 写调度幂等测试**
+- [x] **Step 1: 写调度幂等测试**
 
 固定时间后连续执行两次自动完成和滚动生成；第一次返回实际影响数，第二次返回 0；断言课程状态和模板实例不重复。
 
-- [ ] **Step 2: 写真实应用核心集成测试**
+- [x] **Step 2: 写真实应用核心集成测试**
 
 通过 TestClient 执行创建学生、创建课程、制造冲突、完成/请假/恢复、批量失败回滚、查询统计和无效恢复；断言前端依赖字段和结构化错误稳定存在。
 
-- [ ] **Step 3: 写前端契约测试**
+- [x] **Step 3: 写前端契约测试**
 
 用自定义 Axios adapter 返回集成层固定 JSON，验证各 API 包装器解析结果以及 `toAppError` 对结构化错误的映射。
 
-- [ ] **Step 4: 运行分层验证**
+- [x] **Step 4: 运行分层验证**
 
 Run: `cd app/backend && python -m pytest -q && python -m compileall app`
 
@@ -433,17 +433,17 @@ Run: `cd app/frontend && npm test -- --run && npm run build`
 
 Expected: 全部 PASS，零失败。
 
-- [ ] **Step 5: 执行 PWA 浏览器验收**
+- [x] **Step 5: 执行 PWA 浏览器验收**
 
 使用生产构建和 Playwright，验证在线加载、离线页、API 不进入 Cache Storage、从 `kebiao-cache-v1` 升级、更新提示和用户确认刷新；桌面 1440×900 与移动 390×844 各执行一次。
 
-- [ ] **Step 6: 执行差异与数据安全检查**
+- [x] **Step 6: 执行差异与数据安全检查**
 
 Run: `git diff --check && git status --short`
 
 确认测试没有写入 `app/backend/data` 或开发数据库，构建产物、临时恢复文件和 Vite 生成文件不进入提交。
 
-- [ ] **Step 7: 记录验收并提交**
+- [x] **Step 7: 记录验收并提交**
 
 在本计划末尾记录测试数量、构建结果、浏览器视口、PWA 场景和非阻断项。
 
@@ -456,13 +456,23 @@ git commit -m "test: verify phase five stability"
 
 ## 最终验收清单
 
-- [ ] GET 网络、超时、502、503、504 最多重试两次，逻辑请求编号保持一致。
-- [ ] 写请求和主动取消请求不自动重试。
-- [ ] 前后端响应头和日志可通过请求编号关联。
-- [ ] 刷新失败保留旧数据，过期响应不能覆盖新数据。
-- [ ] 课程状态矩阵、跨午夜冲突和批量事务有自动化覆盖。
-- [ ] 恢复无效数据库不会修改当前数据库或遗留临时文件。
-- [ ] 项目时区、周/月/年/闰年和统计口径通过回归测试。
-- [ ] Service Worker 不缓存 API，升级删除 `kebiao-cache-v1`。
-- [ ] 前端、后端、集成、调度、PWA 和生产构建均通过。
-- [ ] 未引入登录鉴权，也未修改第六阶段部署进程模型。
+- [x] GET 网络、超时、502、503、504 最多重试两次，逻辑请求编号保持一致。
+- [x] 写请求和主动取消请求不自动重试。
+- [x] 前后端响应头和日志可通过请求编号关联。
+- [x] 刷新失败保留旧数据，过期响应不能覆盖新数据。
+- [x] 课程状态矩阵、跨午夜冲突和批量事务有自动化覆盖。
+- [x] 恢复无效数据库不会修改当前数据库或遗留临时文件。
+- [x] 项目时区、周/月/年/闰年和统计口径通过回归测试。
+- [x] Service Worker 不缓存 API，升级删除 `kebiao-cache-v1`。
+- [x] 前端、后端、集成、调度、PWA 和生产构建均通过。
+- [x] 未引入登录鉴权，也未修改第六阶段部署进程模型。
+
+## 2026-08-13 第五阶段验收记录
+
+- 后端：`46 passed`；`compileall app tests` 通过。
+- 前端：37 个测试文件、`124 passed`；`vue-tsc -b && vite build` 通过。
+- 调度与集成：调度幂等、真实 FastAPI 核心链路和前端 API 契约测试全部通过。
+- 浏览器：Chromium 生产预览在桌面 `1440×900` 与移动 `390×844` 通过，无控制台错误和水平溢出。
+- PWA：API 为 network-only；`kebiao-cache-v1` 升级时删除；等待版本提示、用户确认激活、单次刷新和离线页回退通过。
+- 数据安全：测试使用临时 SQLite；未写入 `app/backend/data`；验收脚本、临时数据库和恢复临时文件均已清理。
+- 非阻断项：临时安装 Playwright 时 npm audit 报告 3 个中等、1 个高危依赖告警；未执行破坏性自动修复，未修改依赖清单或锁文件。

@@ -10,7 +10,7 @@ from app.services import restore_service
 
 
 CORE_TABLES = {
-    "students", "schedule_templates", "lessons", "settings", "user_profiles", "alembic_version",
+    "students", "schedule_templates", "lessons", "settings", "user_profile", "alembic_version",
 }
 
 

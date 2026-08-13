@@ -6,8 +6,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.database import SessionLocal
+from app.config import get_settings
 from app.services import lesson_service
-from app.timeutil import TZ
 
 logger = logging.getLogger(__name__)
 scheduler: BackgroundScheduler | None = None
@@ -35,16 +35,17 @@ def start_scheduler() -> None:
     global scheduler
     if scheduler is not None:
         return
-    scheduler = BackgroundScheduler(timezone=TZ)
+    timezone_name = get_settings().TIMEZONE
+    scheduler = BackgroundScheduler(timezone=timezone_name)
     scheduler.add_job(
         _auto_complete_job,
-        CronTrigger(hour=0, minute=5, timezone=TZ),
+        CronTrigger(hour=0, minute=5, timezone=timezone_name),
         id="auto_complete_past_lessons",
         replace_existing=True,
     )
     scheduler.add_job(
         _roll_forward_job,
-        CronTrigger(hour=0, minute=10, timezone=TZ),
+        CronTrigger(hour=0, minute=10, timezone=timezone_name),
         id="roll_forward_all_templates",
         replace_existing=True,
     )

@@ -13,7 +13,7 @@ CORE_TABLES = {
     "schedule_templates",
     "lessons",
     "settings",
-    "user_profiles",
+    "user_profile",
     "alembic_version",
 }
 
