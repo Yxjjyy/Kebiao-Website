@@ -1,6 +1,6 @@
 """课时实例服务：生成、冲突检测、调课、状态变更。"""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, select
@@ -29,13 +29,14 @@ def find_conflicts(
     duration_hours: float,
     exclude_lesson_id: int | None = None,
 ) -> list[Lesson]:
-    new_start = time_to_minutes(start_time)
-    new_end = new_start + int(duration_hours * 60)
+    new_start = datetime.combine(on_date, datetime.strptime(start_time, "%H:%M").time())
+    new_end = new_start + timedelta(hours=duration_hours)
     stmt = (
         select(Lesson)
         .options(selectinload(Lesson.student))
         .where(
-            Lesson.date == on_date,
+            Lesson.date >= on_date - timedelta(days=1),
+            Lesson.date <= on_date + timedelta(days=1),
             Lesson.status.in_(("待上", "已完成")),
         )
     )
@@ -44,8 +45,8 @@ def find_conflicts(
     candidates = db.execute(stmt).scalars().all()
     conflicts: list[Lesson] = []
     for c in candidates:
-        c_start = time_to_minutes(c.start_time)
-        c_end = c_start + int(c.duration_hours * 60)
+        c_start = datetime.combine(c.date, datetime.strptime(c.start_time, "%H:%M").time())
+        c_end = c_start + timedelta(hours=c.duration_hours)
         if overlaps(new_start, new_end, c_start, c_end):
             conflicts.append(c)
     return conflicts
@@ -232,6 +233,69 @@ def auto_complete_past_lessons(db: Session) -> int:
 # ---------------------------- lesson CRUD ----------------------------
 
 
+ALLOWED_STATUS_TRANSITIONS = {
+    "待上": {"待上", "已完成"},
+    "已完成": {"已完成", "待上"},
+    "请假": {"请假", "待上"},
+    "已调课": {"已调课", "待上"},
+}
+
+
+def _invalid_transition(lesson: Lesson, target: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "error": "invalid_status_transition",
+            "message": f"{lesson.status}课程不能直接标记为{target}",
+            "from_status": lesson.status,
+            "to_status": target,
+        },
+    )
+
+
+def _transition_lesson(db: Session, lesson: Lesson, target: str) -> Lesson:
+    if target not in ALLOWED_STATUS_TRANSITIONS.get(lesson.status, set()):
+        raise _invalid_transition(lesson, target)
+    if target == lesson.status:
+        return lesson
+    if target == "待上":
+        raise_if_conflict(
+            db,
+            on_date=lesson.date,
+            start_time=lesson.start_time,
+            duration_hours=lesson.duration_hours,
+            exclude_lesson_id=lesson.id,
+        )
+        if lesson.status == "已调课" and lesson.rescheduled_to_id:
+            new_lesson = db.get(Lesson, lesson.rescheduled_to_id)
+            if new_lesson:
+                new_lesson.rescheduled_from_id = None
+            lesson.rescheduled_to_id = None
+    lesson.status = target
+    return lesson
+
+
+def _cancel_lesson(lesson: Lesson, note: str | None = None) -> Lesson:
+    if lesson.status == "请假":
+        return lesson
+    if lesson.status != "待上":
+        raise _invalid_transition(lesson, "请假")
+    lesson.status = "请假"
+    if note is not None:
+        lesson.note = note
+    return lesson
+
+
+def _restore_lesson(db: Session, lesson: Lesson) -> Lesson:
+    if lesson.status == "待上":
+        return lesson
+    return _transition_lesson(db, lesson, "待上")
+
+
+def _delete_lesson(db: Session, lesson: Lesson) -> None:
+    db.delete(lesson)
+
+
 def list_lessons(
     db: Session,
     *,
@@ -292,6 +356,10 @@ def update_lesson(db: Session, lesson_id: int, payload: LessonUpdate) -> Lesson:
     new_dur = data.get("duration_hours", ls.duration_hours)
     new_status = data.get("status", ls.status)
 
+    if new_status != ls.status:
+        _transition_lesson(db, ls, new_status)
+        data.pop("status", None)
+
     # 仅当依然处于 待上/已完成 状态、且时段或日期有改动，才检测冲突
     time_changed = (
         new_date != ls.date or new_time != ls.start_time or new_dur != ls.duration_hours
@@ -304,14 +372,6 @@ def update_lesson(db: Session, lesson_id: int, payload: LessonUpdate) -> Lesson:
             duration_hours=new_dur,
             exclude_lesson_id=ls.id,
         )
-
-    # 若从"已调课"改为"待上"，清理调课引用
-    if ls.status == "已调课" and new_status == "待上":
-        if ls.rescheduled_to_id:
-            new_lesson = db.get(Lesson, ls.rescheduled_to_id)
-            if new_lesson:
-                new_lesson.rescheduled_from_id = None
-        data["rescheduled_to_id"] = None
 
     for k, v in data.items():
         setattr(ls, k, v)
@@ -332,8 +392,16 @@ def reschedule_lesson(
 ) -> tuple[Lesson, Lesson]:
     """返回 (旧 lesson 已标已调课, 新 lesson)。"""
     old = get_lesson(db, lesson_id)
-    if old.status in ("请假", "已调课"):
-        raise HTTPException(status_code=400, detail=f"该课时状态为「{old.status}」，无法调课")
+    if old.status != "待上":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "invalid_status_transition",
+                "message": f"{old.status}课程不能直接调课",
+                "from_status": old.status,
+                "to_status": "已调课",
+            },
+        )
     student = db.get(Student, old.student_id)
     if not student:
         raise HTTPException(status_code=404, detail="学生不存在")
@@ -369,11 +437,7 @@ def reschedule_lesson(
 
 def cancel_lesson(db: Session, lesson_id: int, note: str | None = None) -> Lesson:
     ls = get_lesson(db, lesson_id)
-    if ls.status == "已调课":
-        raise HTTPException(status_code=400, detail="已调课的课时不能直接请假，请先处理调课记录")
-    ls.status = "请假"
-    if note is not None:
-        ls.note = note
+    _cancel_lesson(ls, note)
     db.commit()
     db.refresh(ls)
     return ls
@@ -381,23 +445,7 @@ def cancel_lesson(db: Session, lesson_id: int, note: str | None = None) -> Lesso
 
 def restore_lesson(db: Session, lesson_id: int) -> Lesson:
     ls = get_lesson(db, lesson_id)
-    if ls.status not in ("请假", "已调课"):
-        return ls
-    # 冲突检测（恢复成 待上 时同样要校验）
-    raise_if_conflict(
-        db,
-        on_date=ls.date,
-        start_time=ls.start_time,
-        duration_hours=ls.duration_hours,
-        exclude_lesson_id=ls.id,
-    )
-    # 若从"已调课"恢复，清理新课时对旧课的反向引用
-    if ls.status == "已调课" and ls.rescheduled_to_id:
-        new_lesson = db.get(Lesson, ls.rescheduled_to_id)
-        if new_lesson:
-            new_lesson.rescheduled_from_id = None
-    ls.status = "待上"
-    ls.rescheduled_to_id = None
+    _restore_lesson(db, ls)
     db.commit()
     db.refresh(ls)
     return ls
@@ -405,7 +453,7 @@ def restore_lesson(db: Session, lesson_id: int) -> Lesson:
 
 def delete_lesson(db: Session, lesson_id: int) -> None:
     ls = get_lesson(db, lesson_id)
-    db.delete(ls)
+    _delete_lesson(db, ls)
     db.commit()
 
 
@@ -416,25 +464,41 @@ def bulk_action(
     action: str,
     note: str | None = None,
 ) -> dict[str, int]:
+    if action not in {"delete", "complete", "cancel", "restore"}:
+        raise HTTPException(status_code=400, detail="不支持的批量操作")
+    unique_ids = list(dict.fromkeys(lesson_ids))
+    lessons = list(db.execute(select(Lesson).where(Lesson.id.in_(unique_ids))).scalars())
+    by_id = {lesson.id: lesson for lesson in lessons}
+    missing = [lesson_id for lesson_id in unique_ids if lesson_id not in by_id]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "lesson_not_found", "lesson_id": missing[0]},
+        )
     affected = 0
-    for lesson_id in lesson_ids:
-        if action == "delete":
-            ls = get_lesson(db, lesson_id)
-            db.delete(ls)
-            affected += 1
-            continue
-        if action == "complete":
-            ls = update_lesson(db, lesson_id, LessonUpdate(status="已完成"))
-        elif action == "cancel":
-            ls = cancel_lesson(db, lesson_id, note)
-        elif action == "restore":
-            ls = get_lesson(db, lesson_id)
-            if ls.status in ("请假", "已调课"):
-                ls = restore_lesson(db, lesson_id)
-            else:
-                continue
-        else:
-            raise HTTPException(status_code=400, detail="不支持的批量操作")
-        affected += 1
-    db.commit()
-    return {"affected": affected}
+    try:
+        for lesson_id in unique_ids:
+            lesson = by_id[lesson_id]
+            before = lesson.status
+            try:
+                if action == "delete":
+                    _delete_lesson(db, lesson)
+                elif action == "complete":
+                    _transition_lesson(db, lesson, "已完成")
+                elif action == "cancel":
+                    _cancel_lesson(lesson, note)
+                else:
+                    _restore_lesson(db, lesson)
+            except HTTPException as exc:
+                detail = exc.detail if isinstance(exc.detail, dict) else {"message": exc.detail}
+                raise HTTPException(
+                    status_code=exc.status_code,
+                    detail={**detail, "lesson_id": lesson_id},
+                ) from exc
+            if action == "delete" or lesson.status != before:
+                affected += 1
+        db.commit()
+        return {"affected": affected}
+    except Exception:
+        db.rollback()
+        raise

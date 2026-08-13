@@ -42,3 +42,18 @@ def test_app(tmp_path) -> Iterator[FastAPI]:
 def client(test_app: FastAPI) -> Iterator[TestClient]:
     with TestClient(test_app) as value:
         yield value
+
+
+@pytest.fixture
+def db_session(tmp_path) -> Iterator[Session]:
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'service.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
