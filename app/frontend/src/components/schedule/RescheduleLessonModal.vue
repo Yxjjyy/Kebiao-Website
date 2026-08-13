@@ -1,25 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { AxiosError } from 'axios'
+import { reactive, ref, watch } from 'vue'
 import { lessonsApi } from '@/api/lessons'
-import type { ConflictResponse, Lesson } from '@/api/types'
+import type { Lesson } from '@/api/types'
+import AsyncButton from '@/components/ui/AsyncButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import FormField from '@/components/ui/FormField.vue'
+import InlineAlert from '@/components/ui/InlineAlert.vue'
 import { useToast } from '@/composables/useToast'
-
-const toast = useToast()
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
-}
-
-onMounted(() => {
-  document.body.style.overflow = 'hidden'
-  document.addEventListener('keydown', onKeydown)
-})
-
-onUnmounted(() => {
-  document.body.style.overflow = ''
-  document.removeEventListener('keydown', onKeydown)
-})
+import { parseFormError } from '@/lib/formError'
+import LessonTimeFields from './LessonTimeFields.vue'
 
 const props = defineProps<{
   lesson: Lesson | null
@@ -28,49 +17,26 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'close'): void
-  (e: 'refresh'): void
+  close: []
+  refresh: []
 }>()
 
-const form = reactive({
-  new_date: '',
-  new_start_time: '',
-  new_duration_hours: 1,
-  note: '',
-})
-
-const message = ref('')
+const toast = useToast()
+const form = reactive({ new_date: '', new_start_time: '', new_duration_hours: 1, note: '' })
 const error = ref('')
 const submitting = ref(false)
 
-watch(
-  () => props.lesson,
-  (lesson) => {
-    if (!lesson) return
-    form.new_date = lesson.date
-    form.new_start_time = lesson.start_time
-    form.new_duration_hours = lesson.duration_hours
-    form.note = lesson.note ?? ''
-    message.value = ''
-    error.value = ''
-  },
-  { immediate: true }
-)
-
-function parseApiError(err: unknown) {
-  if (err instanceof AxiosError) {
-    const detail = err.response?.data as { detail?: ConflictResponse | string } | undefined
-    if (detail && typeof detail.detail === 'object' && detail.detail.error === 'time_conflict') {
-      return `时间冲突：${detail.detail.conflicts.map((item) => `${item.date} ${item.start_time} ${item.student_name}`).join('；')}`
-    }
-    if (typeof detail?.detail === 'string') return detail.detail
-  }
-  return '操作失败，请稍后再试'
-}
+watch(() => props.lesson, (lesson) => {
+  if (!lesson) return
+  form.new_date = lesson.date
+  form.new_start_time = lesson.start_time.slice(0, 5)
+  form.new_duration_hours = lesson.duration_hours
+  form.note = lesson.note ?? ''
+  error.value = ''
+}, { immediate: true })
 
 async function submit() {
-  if (!props.lesson) return
-  message.value = ''
+  if (!props.lesson || submitting.value) return
   error.value = ''
   submitting.value = true
   try {
@@ -84,7 +50,7 @@ async function submit() {
     emit('refresh')
     emit('close')
   } catch (err) {
-    error.value = parseApiError(err)
+    error.value = parseFormError(err)
   } finally {
     submitting.value = false
   }
@@ -92,51 +58,49 @@ async function submit() {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="emit('close')">
-      <div class="fixed inset-0 bg-black/30 modal-backdrop" />
-      <div class="modal-panel glass-strong relative z-10 max-h-[85vh] w-full max-w-md overflow-y-auto p-6">
-        <button class="absolute right-4 top-4 text-[var(--text-dim)] hover:text-[var(--text)]" @click="emit('close')">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-
-        <h2 class="text-base font-semibold">调课</h2>
-
-        <div v-if="lesson" class="mt-4 space-y-4">
-          <div class="rounded-2xl border border-white/35 bg-white/35 px-3 py-2.5 text-xs text-[var(--text-dim)] dark:border-white/8 dark:bg-white/5">
-            原课：{{ lesson.date }} {{ lesson.start_time.slice(0,5) }} · {{ lesson.duration_hours }}h
-          </div>
-
-          <form class="grid gap-3.5 md:grid-cols-2" @submit.prevent="submit">
-            <label class="block">
-              <span class="label">新日期</span>
-              <input v-model="form.new_date" class="input" type="date" required />
-            </label>
-            <label class="block">
-              <span class="label">新时间</span>
-              <input v-model="form.new_start_time" class="input" type="time" required />
-            </label>
-            <label class="block">
-              <span class="label">新课時</span>
-              <select v-model.number="form.new_duration_hours" class="input">
-                <option :value="0.5">0.5h</option>
-                <option :value="1">1h</option>
-                <option :value="1.5">1.5h</option>
-              </select>
-            </label>
-            <label class="block md:col-span-2">
-              <span class="label">备注</span>
-              <textarea v-model="form.note" class="input min-h-16 resize-y" />
-            </label>
-            <div class="md:col-span-2">
-              <button class="btn-primary btn-sm" :disabled="submitting">{{ submitting ? '提交中...' : '确认调课' }}</button>
-            </div>
-          </form>
-        </div>
-
-        <p v-if="message" class="mt-3 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">{{ message }}</p>
-        <p v-if="error" class="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">{{ error }}</p>
+  <AppDialog
+    :open="Boolean(lesson)"
+    title="调课"
+    description="核对原课程后设置新的上课安排"
+    size="lg"
+    :close-disabled="submitting"
+    @close="emit('close')"
+  >
+    <form v-if="lesson" class="space-y-4" @submit.prevent="submit">
+      <div class="grid gap-3 md:grid-cols-2">
+        <section class="rounded-2xl border border-white/35 bg-white/35 px-3.5 py-3 dark:border-white/10 dark:bg-white/5">
+          <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--text-dim)]">原课程</p>
+          <p class="mt-2 text-sm font-semibold">{{ lesson.student?.name ?? '未命名学生' }}</p>
+          <p class="mt-1 text-xs text-[var(--text-dim)]">{{ lesson.date }} · {{ lesson.start_time.slice(0, 5) }} · {{ lesson.duration_hours }} 小时</p>
+        </section>
+        <section class="rounded-2xl border border-[var(--accent)]/20 bg-[var(--accent)]/5 px-3.5 py-3">
+          <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--accent)]">目标安排</p>
+          <p class="mt-2 text-sm font-semibold">{{ form.new_date || '待选择日期' }}</p>
+          <p class="mt-1 text-xs text-[var(--text-dim)]">{{ form.new_start_time || '待选择时间' }} · {{ form.new_duration_hours }} 小时</p>
+        </section>
       </div>
-    </div>
-  </Teleport>
+
+      <LessonTimeFields
+        v-model:date="form.new_date"
+        v-model:start-time="form.new_start_time"
+        v-model:duration-hours="form.new_duration_hours"
+        date-label="新日期"
+        time-label="新时间"
+        duration-label="新课时"
+        id-prefix="reschedule-lesson"
+        :disabled="submitting"
+      />
+
+      <FormField for-id="reschedule-lesson-note" label="备注" hint="可选，说明本次调课原因">
+        <template #default="{ describedby }">
+          <textarea id="reschedule-lesson-note" v-model="form.note" class="input min-h-20 resize-y" :aria-describedby="describedby || undefined" />
+        </template>
+      </FormField>
+
+      <InlineAlert v-if="error" tone="error" :message="error" />
+      <div class="flex justify-end">
+        <AsyncButton :pending="submitting" pending-label="提交中…">确认调课</AsyncButton>
+      </div>
+    </form>
+  </AppDialog>
 </template>

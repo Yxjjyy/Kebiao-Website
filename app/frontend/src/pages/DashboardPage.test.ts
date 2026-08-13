@@ -6,6 +6,8 @@ import StudentOverview from '@/components/students/StudentOverview.vue'
 import StudentsPanel from '@/components/students/StudentsPanel.vue'
 import TemplateManager from '@/components/students/TemplateManager.vue'
 import StatsPanel from '@/components/stats/StatsPanel.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import ScheduleBoard from '@/components/schedule/ScheduleBoard.vue'
 import DashboardPage from './DashboardPage.vue'
 
 const apiMocks = vi.hoisted(() => ({
@@ -19,10 +21,13 @@ const apiMocks = vi.hoisted(() => ({
   statsLeave: vi.fn(),
   exportDownload: vi.fn(),
   templatesList: vi.fn(),
+  lessonsBulk: vi.fn(),
+  lessonsRemove: vi.fn(),
+  lessonsCancel: vi.fn(),
 }))
 
 vi.mock('@/api/lessons', () => ({
-  lessonsApi: { list: apiMocks.lessonsList },
+  lessonsApi: { list: apiMocks.lessonsList, bulk: apiMocks.lessonsBulk, remove: apiMocks.lessonsRemove, cancel: apiMocks.lessonsCancel },
 }))
 
 vi.mock('@/api/students', () => ({
@@ -130,7 +135,55 @@ beforeEach(() => {
   apiMocks.statsStudents.mockResolvedValue([])
   apiMocks.statsLeave.mockResolvedValue([])
   apiMocks.templatesList.mockResolvedValue([])
+  apiMocks.lessonsBulk.mockResolvedValue({ affected: 0 })
+  apiMocks.lessonsRemove.mockResolvedValue(undefined)
+  apiMocks.lessonsCancel.mockResolvedValue(undefined)
   apiMocks.exportDownload.mockResolvedValue(new Blob())
+})
+
+describe('DashboardPage destructive actions', () => {
+  const lesson = {
+    id: 8, student_id: 1, template_id: null, date: '2026-08-10', start_time: '10:00',
+    duration_hours: 1, status: '待上', price: 260, note: null, rescheduled_from_id: null,
+    rescheduled_to_id: null, created_at: '', updated_at: '', student: { id: 1, name: '林晓', color: '#8b39b5' },
+  }
+
+  it('confirms a quick lesson deletion before calling the API', async () => {
+    apiMocks.lessonsList.mockResolvedValue([lesson])
+    const { wrapper } = await mountDashboard()
+    wrapper.getComponent(ScheduleBoard).vm.$emit('delete-lesson', lesson)
+    await flushPromises()
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('title')).toContain('删除')
+    expect(apiMocks.lessonsRemove).not.toHaveBeenCalled()
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(apiMocks.lessonsRemove).toHaveBeenCalledTimes(1)
+  })
+
+  it('includes the selected count in bulk deletion confirmation', async () => {
+    apiMocks.lessonsList.mockResolvedValue([lesson])
+    const { wrapper } = await mountDashboard()
+    wrapper.getComponent(ScheduleBoard).vm.$emit('toggle-bulk', lesson)
+    await wrapper.vm.$nextTick()
+    await wrapper.get('[data-action="bulk-delete"]').trigger('click')
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('description')).toContain('1 节')
+    expect(apiMocks.lessonsBulk).not.toHaveBeenCalled()
+  })
+
+  it('confirms a quick cancellation before calling the API', async () => {
+    apiMocks.lessonsList.mockResolvedValue([lesson])
+    const { wrapper } = await mountDashboard()
+    wrapper.getComponent(ScheduleBoard).vm.$emit('cancel-lesson', lesson)
+    await flushPromises()
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('title')).toContain('请假')
+    expect(apiMocks.lessonsCancel).not.toHaveBeenCalled()
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(apiMocks.lessonsCancel).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('DashboardPage loading failures', () => {
