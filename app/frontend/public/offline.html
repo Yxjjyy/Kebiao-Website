@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#4c7dff" />
+    <title>暂时离线 · 课表</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #eef2ff; color: #1f2937; }
+      main { width: min(86vw, 420px); padding: 2rem; border-radius: 24px; background: rgba(255,255,255,.86); box-shadow: 0 24px 60px rgba(76,125,255,.16); text-align: center; }
+      h1 { margin: 0; font-size: 1.4rem; } p { color: #64748b; line-height: 1.7; }
+      button { min-height: 44px; border: 0; border-radius: 14px; padding: 0 1.2rem; background: #4c7dff; color: white; font-weight: 700; cursor: pointer; }
+      @media (prefers-color-scheme: dark) { body { background: #111827; color: #f8fafc; } main { background: #1f2937; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>当前网络不可用</h1>
+      <p>课表数据不会使用旧的 API 缓存。恢复网络后，请重新加载页面获取最新内容。</p>
+      <button type="button" onclick="location.reload()">重新加载</button>
+    </main>
+  </body>
+</html>

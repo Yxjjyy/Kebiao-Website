@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@/composables/useToast'
+import { useServiceWorkerUpdate } from '@/composables/useServiceWorkerUpdate'
 import MobileTabBar from './MobileTabBar.vue'
 
 const props = withDefaults(defineProps<{
@@ -17,6 +18,7 @@ const emit = defineEmits<{ (e: 'change-tab', tab: string): void }>()
 const settings = useSettingsStore()
 const toast = useToast()
 const router = useRouter()
+const serviceWorkerUpdate = useServiceWorkerUpdate()
 
 const tabRoutes: Record<string, string> = {
   schedule: '/', students: '/students', stats: '/stats', settings: '/settings',
@@ -94,6 +96,21 @@ function handleTabChange(tab: string) {
     </main>
 
     <MobileTabBar :active-tab="activeTab" @select="handleTabChange" />
+
+    <aside
+      v-if="serviceWorkerUpdate.updateAvailable.value"
+      role="status"
+      class="glass-strong fixed bottom-24 left-1/2 z-[85] flex w-[min(92vw,420px)] -translate-x-1/2 items-center justify-between gap-3 rounded-2xl px-4 py-3 shadow-lg lg:bottom-6"
+    >
+      <div class="min-w-0">
+        <p class="text-xs font-extrabold">新版本已就绪</p>
+        <p class="mt-0.5 text-[10px] text-[var(--text-dim)]">更新后将刷新页面，请先保存正在编辑的内容。</p>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <button type="button" class="btn-ghost btn-sm" @click="serviceWorkerUpdate.dismissUpdate">稍后</button>
+        <button type="button" class="btn-primary btn-sm" @click="serviceWorkerUpdate.applyUpdate">立即更新</button>
+      </div>
+    </aside>
 
     <div
       v-if="toast.visible.value"

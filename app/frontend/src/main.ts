@@ -5,6 +5,7 @@ import { MotionPlugin } from '@vueuse/motion'
 import App from './App.vue'
 import router from './router'
 import './styles/globals.css'
+import { useServiceWorkerUpdate } from '@/composables/useServiceWorkerUpdate'
 
 const app = createApp(App)
 app.use(createPinia())
@@ -14,5 +15,7 @@ app.use(MotionPlugin)
 app.mount('#app')
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {})
+  navigator.serviceWorker.register('/sw.js')
+    .then(registration => useServiceWorkerUpdate().observe(registration))
+    .catch(() => {})
 }
