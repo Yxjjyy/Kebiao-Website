@@ -33,4 +33,8 @@ describe('parseFormError', () => {
     expect(parseFormError({ response: { data: { detail: '日期无效' } } })).toBe('日期无效')
     expect(parseFormError(new Error('boom'))).toBe('操作失败，请稍后再试')
   })
+
+  it('uses the centralized timeout message', () => {
+    expect(parseFormError({ code: 'ECONNABORTED', isAxiosError: true })).toBe('请求超时，请稍后重试')
+  })
 })
