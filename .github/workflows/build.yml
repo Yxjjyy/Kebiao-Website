@@ -1,0 +1,54 @@
+name: Build Frontend & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app/frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: app/frontend
+        run: npm run build
+
+      - name: Package dist
+        working-directory: app/frontend
+        run: |
+          zip -r ../../kebiao-dist.zip dist
+          echo "BUILD_SHA=${{ github.sha }}" > ../../build-info.txt
+          echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ../../build-info.txt
+          cat ../../build-info.txt
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          release_name: Kebiao Latest Build
+          files: |
+            kebiao-dist.zip
+            build-info.txt
+          overwrite: true
+          body: |
+            自动化前端构建产物（服务器部署用，匿名可下载）
+            - Commit: `${{ github.sha }}`
+            - Triggered by: `${{ github.event.head_commit.message }}`
+          fail_on_unmatched_files: true
