@@ -1,6 +1,5 @@
 """备份/恢复路由。"""
 
-import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -9,6 +8,12 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import Settings, get_settings
+from app.database import engine
+from app.services.restore_service import (
+    RestoreOperationError,
+    RestoreValidationError,
+    restore_database,
+)
 
 router = APIRouter(tags=["backup"])
 
@@ -46,11 +51,15 @@ async def upload_restore(
             detail="须带 X-Confirm-Restore: yes 头部以确认覆盖操作",
         )
     db_path = Path(settings.DB_PATH).resolve()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    backup_old = db_path.with_suffix(".db.bak")
-    if db_path.exists():
-        shutil.copy2(db_path, backup_old)
-    with open(db_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-    return {"ok": True, "restored_to": str(db_path), "old_saved_at": str(backup_old)}
+    try:
+        result = await restore_database(
+            file,
+            db_path,
+            max_bytes=settings.MAX_RESTORE_BYTES,
+            dispose_connections=engine.dispose,
+        )
+    except RestoreValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RestoreOperationError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"ok": True, **result.__dict__}

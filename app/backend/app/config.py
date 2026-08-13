@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     TIMEZONE: str = "Asia/Shanghai"
     CORS_ORIGINS: str = "http://localhost:5173"
     LOG_LEVEL: str = "INFO"
+    MAX_RESTORE_BYTES: int = 100 * 1024 * 1024
 
     @property
     def cors_origin_list(self) -> list[str]:
