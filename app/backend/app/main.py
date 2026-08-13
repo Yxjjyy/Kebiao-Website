@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.middleware.request_context import RequestContextMiddleware
 from app.routers import auth, backup, export, lessons, settings as settings_router, stats, students, templates
 from app.scheduler import start_scheduler, stop_scheduler
 
@@ -28,6 +29,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(RequestContextMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
