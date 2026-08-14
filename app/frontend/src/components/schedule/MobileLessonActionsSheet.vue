@@ -34,7 +34,7 @@ function addToCalendar() {
       @click="emit('close')"
     />
 
-    <section class="action-sheet absolute inset-x-0 bottom-0 rounded-t-[28px] border border-white/70 bg-[#fbf9fd]/95 px-4 pb-5 pt-2 shadow-[0_-20px_60px_rgba(64,42,82,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#211a2a]/95">
+    <section class="action-sheet absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-[28px] border border-white/70 bg-[#fbf9fd]/95 px-4 pb-5 pt-2 shadow-[0_-20px_60px_rgba(64,42,82,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#211a2a]/95">
       <div class="mx-auto mb-3 h-1 w-11 rounded-full bg-[#d8cfdf] dark:bg-white/20" />
 
       <header class="flex items-start justify-between gap-4 px-1">

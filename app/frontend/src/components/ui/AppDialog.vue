@@ -53,7 +53,8 @@ function preventClose(event: Event) {
       <DialogOverlay class="modal-backdrop fixed inset-0 z-[100] bg-slate-950/45 backdrop-blur-sm" />
       <DialogContent
         :class="[
-          'modal-panel glass-strong fixed left-1/2 top-1/2 z-[101] max-h-[85vh] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto p-6 shadow-2xl focus:outline-none',
+          'modal-panel glass-strong fixed inset-x-0 bottom-0 z-[101] max-h-[85vh] w-full overflow-y-auto p-6 shadow-2xl focus:outline-none',
+          'sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[85vh] sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2',
           panelSize,
         ]"
         @escape-key-down="preventClose"

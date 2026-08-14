@@ -330,20 +330,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .modal-panel { animation: modal-pop 0.25s cubic-bezier(0.21, 1.02, 0.73, 1) forwards; }
 
   /* ===== Mobile bottom-sheet modal ===== */
-  /* 覆盖 AppDialog 的 top-1/2 居中工具类（Tailwind 分层样式无法压过本未分层规则），
-     并让 sheet-up 动画接管 transform，避免 forwards 覆盖 translate 居中导致弹窗偏角。 */
+  /* 定位由 AppDialog 组件类控制（inset-x-0 bottom-0 / sm:left-1/2 sm:top-1/2），
+     这里只负责移动端入场动画与安全区留白。 */
   @media (max-width: 768px) {
     .modal-panel {
-      position: fixed;
-      top: auto;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      max-height: 85vh;
-      width: 100%;
-      max-width: 100%;
-      border-radius: 1.25rem 1.25rem 0 0;
       animation: sheet-up 0.3s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+      border-radius: 1.25rem 1.25rem 0 0;
       padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
     }
   }
