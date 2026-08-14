@@ -25,6 +25,31 @@ def test_auto_complete_is_idempotent(db_session, monkeypatch):
     assert lesson.status == "已完成"
 
 
+def test_auto_complete_cross_midnight_lesson(db_session, monkeypatch):
+    student = Student(name="林晓", color="#8b5cf6", hourly_rate=200)
+    db_session.add(student)
+    db_session.flush()
+    lesson = Lesson(
+        student_id=student.id, date=date(2026, 8, 12), start_time="23:00",
+        duration_hours=2, status="待上", price=400,
+    )
+    db_session.add(lesson)
+    db_session.commit()
+
+    # 8/13 00:30 时课程（01:00 结束）仍在进行中，不应完成
+    monkeypatch.setattr(lesson_service, "today", lambda: date(2026, 8, 13))
+    monkeypatch.setattr(lesson_service, "now", lambda: datetime(2026, 8, 13, 0, 30))
+    assert lesson_service.auto_complete_past_lessons(db_session) == 0
+    db_session.refresh(lesson)
+    assert lesson.status == "待上"
+
+    # 8/13 01:30 时课程已结束，应完成
+    monkeypatch.setattr(lesson_service, "now", lambda: datetime(2026, 8, 13, 1, 30))
+    assert lesson_service.auto_complete_past_lessons(db_session) == 1
+    db_session.refresh(lesson)
+    assert lesson.status == "已完成"
+
+
 def test_roll_forward_is_idempotent(db_session, monkeypatch):
     student = Student(name="林晓", color="#8b5cf6", hourly_rate=200)
     db_session.add(student)

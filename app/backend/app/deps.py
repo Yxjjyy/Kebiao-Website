@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -22,7 +24,7 @@ def require_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization 格式应为 'Bearer <token>'",
         )
-    if token != settings.ACCESS_TOKEN:
+    if not secrets.compare_digest(token, settings.ACCESS_TOKEN):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="token 无效",

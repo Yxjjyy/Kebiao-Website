@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import type { Lesson } from '@/api/types'
-import { formatHourMinute, formatShortDate, formatWeekday, getWeekDays, isToday, toIsoDate } from '@/lib/date'
+import { formatHourMinute, formatShortDate, formatWeekday, getWeekDays, getBusinessTodayIso, isToday, toIsoDate } from '@/lib/date'
 import { formatCurrency, formatHours } from '@/lib/format'
 import { resolveSelectedDate } from '@/lib/scheduleDashboard'
 import { useSettingsStore } from '@/stores/settings'
@@ -64,25 +64,32 @@ function cancelEditNote() {
   editingNoteValue.value = ''
 }
 
-const occupiedSlots = computed(() => {
-  const set = new Set<string>()
-  for (const lesson of props.lessons) set.add(`${lesson.date}-${lesson.start_time}`)
-  return set
-})
+// 与后端 find_conflicts 对齐：仅 待上/已完成 且时段重叠才算冲突
+function activeWindows() {
+  const map: Record<string, { id: number; start: number; end: number }[]> = {}
+  for (const lesson of props.lessons) {
+    if (lesson.status !== '待上' && lesson.status !== '已完成') continue
+    const [hour, minute] = lesson.start_time.split(':').map(Number)
+    const start = hour * 60 + minute
+    const list = (map[lesson.date] ??= [])
+    list.push({ id: lesson.id, start, end: start + Math.round(lesson.duration_hours * 60) })
+  }
+  return map
+}
 
 const weekdays = computed(() =>
   getWeekDays(props.weekStart, (settingsStore.settings.week_start as 0 | 1) ?? 1).map((day) => ({
     iso: toIsoDate(day),
     label: formatWeekday(day),
     sublabel: formatShortDate(day),
-    today: isToday(toIsoDate(day)),
+    today: isToday(toIsoDate(day), settingsStore.settings.timezone),
   }))
 )
 
 watch(
   () => weekdays.value.map((d) => d.iso),
   (isos) => {
-    selectedMobileDate.value = resolveSelectedDate(isos, toIsoDate(new Date()))
+    selectedMobileDate.value = resolveSelectedDate(isos, getBusinessTodayIso(settingsStore.settings.timezone))
   },
   { immediate: true }
 )
@@ -129,8 +136,16 @@ function statusClass(status: Lesson['status']) {
 }
 
 const nowLineTop = computed(() => {
-  const now = new Date()
-  const v = now.getHours() + now.getMinutes() / 60
+  // 仅当视图包含业务时区的"今天"时显示当前时间线
+  if (!weekdays.value.some((day) => day.today)) return null
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: settingsStore.settings.timezone,
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const valueMap = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  const v = Number(valueMap.hour) + Number(valueMap.minute) / 60
   if (v < startHour.value || v > endHour.value + 1) return null
   return ((v - startHour.value) / Math.max(1, endHour.value - startHour.value + 1)) * 100
 })
@@ -155,7 +170,13 @@ function onDragOver(event: DragEvent, dayIso: string, slot: string) {
   const lid = Number(event.dataTransfer?.getData('text/plain'))
   const dl = props.lessons.find((l) => l.id === lid)
   if (!dl) { dragOverConflict.value = false; return }
-  dragOverConflict.value = occupiedSlots.value.has(`${dayIso}-${slot}`) && !(dl.date === dayIso && dl.start_time === slot)
+  const [hour, minute] = slot.split(':').map(Number)
+  const start = hour * 60 + minute
+  const end = start + Math.round(dl.duration_hours * 60)
+  const windows = activeWindows()[dayIso] ?? []
+  dragOverConflict.value = windows.some(
+    (w) => w.id !== lid && start < w.end && w.start < end
+  )
   const container = (event.currentTarget as HTMLElement).closest('.schedule-scroll') as HTMLElement
   if (container) {
     const rect = container.getBoundingClientRect()

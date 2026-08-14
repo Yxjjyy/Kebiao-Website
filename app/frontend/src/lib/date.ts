@@ -66,7 +66,8 @@ export function formatHourMinute(value: string) {
   return value.slice(0, 5)
 }
 
-export function isToday(value: string) {
+export function isToday(value: string, timezone?: string) {
+  if (timezone) return value === getBusinessTodayIso(timezone)
   return isSameDay(parseISO(value), new Date())
 }
 

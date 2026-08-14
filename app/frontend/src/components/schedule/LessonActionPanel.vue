@@ -4,6 +4,10 @@ import { AxiosError } from 'axios'
 import { lessonsApi } from '@/api/lessons'
 import type { ConflictResponse, Lesson, Student } from '@/api/types'
 import { formatCurrency } from '@/lib/format'
+import { getBusinessTodayIso } from '@/lib/date'
+import { useSettingsStore } from '@/stores/settings'
+
+const settingsStore = useSettingsStore()
 
 const props = defineProps<{
   lesson: Lesson | null
@@ -19,7 +23,7 @@ const emit = defineEmits<{
 
 const createForm = reactive({
   student_id: 0,
-  date: new Date().toISOString().slice(0, 10),
+  date: getBusinessTodayIso(settingsStore.settings.timezone),
   start_time: '10:00',
   duration_hours: 1,
   note: '',

@@ -3,10 +3,11 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.deps import require_token
 from app.middleware.request_context import RequestContextMiddleware
 from app.routers import auth, backup, export, lessons, settings as settings_router, stats, students, templates
 from app.scheduler import start_scheduler, stop_scheduler
@@ -47,11 +48,12 @@ def health():
 
 
 api_prefix = "/api/v1"
-app.include_router(auth.router, prefix=api_prefix)
-app.include_router(settings_router.router, prefix=api_prefix)
-app.include_router(students.router, prefix=api_prefix)
-app.include_router(templates.router, prefix=api_prefix)
-app.include_router(lessons.router, prefix=api_prefix)
-app.include_router(stats.router, prefix=api_prefix)
-app.include_router(export.router, prefix=api_prefix)
-app.include_router(backup.router, prefix=api_prefix)
+auth_deps = [Depends(require_token)]
+app.include_router(auth.router, prefix=api_prefix, dependencies=auth_deps)
+app.include_router(settings_router.router, prefix=api_prefix, dependencies=auth_deps)
+app.include_router(students.router, prefix=api_prefix, dependencies=auth_deps)
+app.include_router(templates.router, prefix=api_prefix, dependencies=auth_deps)
+app.include_router(lessons.router, prefix=api_prefix, dependencies=auth_deps)
+app.include_router(stats.router, prefix=api_prefix, dependencies=auth_deps)
+app.include_router(export.router, prefix=api_prefix, dependencies=auth_deps)
+app.include_router(backup.router, prefix=api_prefix, dependencies=auth_deps)

@@ -24,7 +24,8 @@ class LessonUpdate(BaseModel):
     date: _date | None = None
     start_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     duration_hours: float | None = Field(default=None, gt=0, le=12)
-    status: LessonStatus | None = None
+    # 请假/已调课 不通过 PATCH 直接设置（有专属端点与状态机）
+    status: Literal["待上", "已完成"] | None = None
     note: str | None = None
 
 

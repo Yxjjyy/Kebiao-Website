@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import re
 import sqlite3
 from pathlib import Path
 
@@ -126,5 +127,5 @@ def test_successful_restore_keeps_timestamped_old_copy(tmp_path):
     assert old_copy.exists()
     assert old_copy.name.startswith("app-before-restore-")
     assert old_copy.name.endswith(".db")
-    assert len(old_copy.stem.rsplit("-", 2)[-2] + old_copy.stem.rsplit("-", 2)[-1]) == 14
+    assert re.fullmatch(r"app-before-restore-\d{8}-\d{6}-\d{6}-[0-9a-f]{4}\.db", old_copy.name)
     assert not list(tmp_path.glob(".restore-*.db"))

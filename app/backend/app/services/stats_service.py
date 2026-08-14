@@ -75,14 +75,21 @@ def today_summary(db: Session) -> TodayStats:
     )
 
 
-def _bucket_key(d: date, granularity: str) -> str:
+def _bucket_key(d: date, granularity: str, week_starts_on: int = 1) -> str:
     if granularity == "day":
         return d.isoformat()
     if granularity == "week":
-        return week_start(d).isoformat()
+        return week_start(d, week_starts_on).isoformat()
     if granularity == "month":
         return d.strftime("%Y-%m")
     raise ValueError("granularity 必须为 day/week/month")
+
+
+def _week_starts_on(db: Session) -> int:
+    from app.models import Settings
+
+    settings_row = db.get(Settings, 1)
+    return settings_row.week_start if settings_row else 1
 
 
 def range_stats(
@@ -92,6 +99,7 @@ def range_stats(
     to_date: date,
     granularity: str = "day",
 ) -> RangeStats:
+    week_starts_on = _week_starts_on(db)
     all_rows = db.execute(
         select(Lesson).where(
             Lesson.date >= from_date,
@@ -112,13 +120,13 @@ def range_stats(
 
     buckets: dict[str, dict] = {}
     for row in completed:
-        key = _bucket_key(row.date, granularity)
+        key = _bucket_key(row.date, granularity, week_starts_on)
         b = buckets.setdefault(
             key, {"income": 0.0, "hours": 0.0, "lesson_count": 0}
         )
         b["income"] += row.price
     for row in active_rows:
-        key = _bucket_key(row.date, granularity)
+        key = _bucket_key(row.date, granularity, week_starts_on)
         b = buckets.setdefault(
             key, {"income": 0.0, "hours": 0.0, "lesson_count": 0}
         )
@@ -291,8 +299,8 @@ def previous_period(
         raise ValueError("from_date 不能晚于 to_date")
     elapsed_days = (to_date - from_date).days
     if period == "day":
-        previous = from_date - timedelta(days=1)
-        return previous, previous
+        previous_start = from_date - timedelta(days=elapsed_days + 1)
+        return previous_start, previous_start + timedelta(days=elapsed_days)
     if period == "week":
         previous_start = from_date - timedelta(days=7)
         return previous_start, previous_start + timedelta(days=elapsed_days)
@@ -318,10 +326,11 @@ def comparison(
 
     if from_date is None or to_date is None:
         today_ = today()
+        week_starts_on = _week_starts_on(db)
         if period == "day":
             cur_start = cur_end = today_
         elif period == "week":
-            cur_start, cur_end = week_start(today_), today_
+            cur_start, cur_end = week_start(today_, week_starts_on), today_
         elif period == "month":
             cur_start, cur_end = month_start(today_), today_
         else:

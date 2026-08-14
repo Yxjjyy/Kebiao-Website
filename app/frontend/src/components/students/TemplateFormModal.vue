@@ -9,12 +9,16 @@ import FormField from '@/components/ui/FormField.vue'
 import InlineAlert from '@/components/ui/InlineAlert.vue'
 import { useToast } from '@/composables/useToast'
 import { parseFormError } from '@/lib/formError'
+import { getBusinessTodayIso } from '@/lib/date'
+import { useSettingsStore } from '@/stores/settings'
+
+const settingsStore = useSettingsStore()
 
 const props = defineProps<{ mode: 'create' | 'edit'; students: Student[]; selectedStudentId: number | null; template: Template | null }>()
 const emit = defineEmits<{ close: []; 'refresh-templates': [] }>()
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const studentId = ref(0), dayOfWeek = ref(0), startTime = ref('16:00'), durationHours = ref(1)
-const effectiveFrom = ref(new Date().toISOString().slice(0, 10)), effectiveTo = ref(''), repeatInterval = ref(1)
+const effectiveFrom = ref(getBusinessTodayIso(settingsStore.settings.timezone)), effectiveTo = ref(''), repeatInterval = ref(1)
 const applyMode = ref<'future_only' | 'from_date' | 'template_only' | 'update_all'>('future_only'), applyFromDate = ref('')
 const saving = ref(false), deleting = ref(false), confirmDeleteOpen = ref(false), message = ref(''), error = ref('')
 const toast = useToast()

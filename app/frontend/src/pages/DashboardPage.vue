@@ -142,6 +142,15 @@ function loadError(error: unknown, fallback: string): AppError {
     : parsed
 }
 
+function mutationError(error: unknown, fallback: string): string {
+  const parsed = toAppError(error)
+  if (parsed.kind === 'unknown') return fallback
+  if (parsed.kind === 'server') {
+    return `${parsed.message}${parsed.requestId ? `（请求号 ${parsed.requestId}）` : ''}`
+  }
+  return parsed.message
+}
+
 function tabFromPath(path: string): 'schedule' | 'students' | 'stats' | 'settings' {
   if (path.startsWith('/students')) return 'students'
   if (path.startsWith('/stats')) return 'stats'
@@ -206,15 +215,13 @@ async function loadDashboard() {
   dashboardError.value = null
   try {
     const week = getWeekRange(currentWeekStart.value, (settingsStore.settings.week_start as 0 | 1) ?? 1)
-    const [lessonRows, studentRows, today] = await Promise.all([
+    const [lessonRows, studentRows] = await Promise.all([
       lessonsApi.list(toIsoDate(week.start), toIsoDate(week.end)),
       studentsApi.list(false),
-      statsApi.today(),
     ])
     if (requestId !== dashboardRequestId) return
     lessons.value = lessonRows
     students.value = studentRows
-    todayStats.value = today
     const requestedStudentId = route.path.startsWith('/students')
       ? Number(route.query.student) || selectedStudentId.value
       : selectedStudentId.value
@@ -226,6 +233,17 @@ async function loadDashboard() {
     }
   } finally {
     if (requestId === dashboardRequestId) loading.value = false
+  }
+
+  // 今日统计独立加载：失败不阻断课程列表（今日卡片显示兜底数据）
+  try {
+    const today = await statsApi.today()
+    if (requestId !== dashboardRequestId) return
+    todayStats.value = today
+  } catch (error) {
+    if (requestId === dashboardRequestId && !isCancel(error)) {
+      todayStats.value = null
+    }
   }
 }
 
@@ -375,8 +393,8 @@ async function handleRescheduleMode(mode: '1' | '2' | '3') {
       status: payload.lesson.status,
     })
     await loadDashboard()
-  } catch {
-    scheduleError.value = '移动失败：目标时间可能存在冲突'
+  } catch (error) {
+    scheduleError.value = mutationError(error, '移动失败：目标时间可能存在冲突')
   }
 }
 
@@ -386,6 +404,13 @@ function toggleBulkLesson(lesson: Lesson) {
   } else {
     bulkSelectedIds.value = [...bulkSelectedIds.value, lesson.id]
   }
+}
+
+const BULK_ACTION_ALLOWED: Record<'complete' | 'cancel' | 'restore' | 'delete', (lesson: Lesson) => boolean> = {
+  complete: (lesson) => lesson.status === '待上',
+  cancel: (lesson) => lesson.status === '待上',
+  restore: (lesson) => lesson.status !== '待上',
+  delete: () => true,
 }
 
 async function runBulkAction(action: 'complete' | 'cancel' | 'restore' | 'delete') {
@@ -398,12 +423,24 @@ async function runBulkAction(action: 'complete' | 'cancel' | 'restore' | 'delete
     return
   }
   scheduleError.value = ''
+  const byId = new Map(lessons.value.map((lesson) => [lesson.id, lesson]))
+  const allowed = bulkSelectedIds.value.filter((id) => {
+    const lesson = byId.get(id)
+    return lesson ? BULK_ACTION_ALLOWED[action](lesson) : true
+  })
+  if (allowed.length !== bulkSelectedIds.value.length) {
+    bulkSelectedIds.value = allowed
+  }
+  if (!allowed.length) {
+    scheduleError.value = '所选课时的状态均不支持该操作'
+    return
+  }
   try {
-    await lessonsApi.bulk({ ids: bulkSelectedIds.value, action })
+    await lessonsApi.bulk({ ids: allowed, action })
     bulkSelectedIds.value = []
     await loadDashboard()
-  } catch {
-    scheduleError.value = '批量操作失败：请检查所选课时状态或时间冲突'
+  } catch (error) {
+    scheduleError.value = mutationError(error, '批量操作失败，请稍后重试')
   }
 }
 
@@ -447,19 +484,21 @@ function handleOpenReschedule() {
 }
 
 async function handleQuickComplete(lesson: Lesson) {
+  scheduleError.value = ''
   try {
     await lessonsApi.update(lesson.id, { status: '已完成' })
     mobileActionLesson.value = null
     await loadDashboard()
-  } catch { scheduleError.value = '操作失败' }
+  } catch (error) { scheduleError.value = mutationError(error, '操作失败，请稍后重试') }
 }
 
 async function handleQuickRestore(lesson: Lesson) {
+  scheduleError.value = ''
   try {
     await lessonsApi.restore(lesson.id)
     mobileActionLesson.value = null
     await loadDashboard()
-  } catch { scheduleError.value = '操作失败' }
+  } catch (error) { scheduleError.value = mutationError(error, '操作失败，请稍后重试') }
 }
 
 function handleQuickCancel(lesson: Lesson) {
@@ -494,11 +533,11 @@ async function confirmDangerAction() {
     }
     pendingDangerAction.value = null
     await loadDashboard()
-  } catch {
-    scheduleError.value = action.kind === 'lesson-delete' ? '删除失败，请稍后重试'
-      : action.kind === 'lesson-cancel' ? '请假操作失败，请稍后重试'
-        : action.kind === 'bulk-delete' ? '批量删除失败，请检查所选课时后重试'
-          : '批量请假失败，请检查所选课时后重试'
+  } catch (error) {
+    scheduleError.value = action.kind === 'lesson-delete' ? mutationError(error, '删除失败，请稍后重试')
+      : action.kind === 'lesson-cancel' ? mutationError(error, '请假操作失败，请稍后重试')
+        : action.kind === 'bulk-delete' ? mutationError(error, '批量删除失败，请稍后重试')
+          : mutationError(error, '批量请假失败，请稍后重试')
   } finally {
     dangerSubmitting.value = false
   }
@@ -510,10 +549,11 @@ function handleMobileEdit(lesson: Lesson) {
 }
 
 async function handleUpdateNote(payload: { lessonId: number; note: string | null }) {
+  scheduleError.value = ''
   try {
     await lessonsApi.update(payload.lessonId, { note: payload.note })
     await loadDashboard()
-  } catch { scheduleError.value = '备注保存失败' }
+  } catch (error) { scheduleError.value = mutationError(error, '备注保存失败，请稍后重试') }
 }
 
 watch(selectedStudentId, async () => {

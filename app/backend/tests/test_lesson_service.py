@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.models import Lesson, ScheduleTemplate, Student
@@ -54,6 +55,10 @@ def test_status_transition_matrix(db_session, student, current, target, allowed)
     if allowed:
         result = lesson_service.update_lesson(db_session, lesson.id, LessonUpdate(status=target))
         assert result.status == target
+    elif target not in ("待上", "已完成"):
+        # 请假/已调课 不走 PATCH，schema 层直接拒绝（422）
+        with pytest.raises(ValidationError):
+            LessonUpdate(status=target)
     else:
         with pytest.raises(HTTPException) as raised:
             lesson_service.update_lesson(db_session, lesson.id, LessonUpdate(status=target))

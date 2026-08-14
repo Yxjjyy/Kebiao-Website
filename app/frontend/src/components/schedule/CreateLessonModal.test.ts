@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createPinia } from 'pinia'
 import { lessonsApi } from '@/api/lessons'
 import type { Student } from '@/api/types'
 import CreateLessonModal from './CreateLessonModal.vue'
@@ -8,6 +9,14 @@ import CreateLessonModal from './CreateLessonModal.vue'
 vi.mock('@/api/lessons', () => ({
   lessonsApi: { create: vi.fn() },
 }))
+
+function mountModal(props: { students: Student[]; defaultDuration: number; currencySymbol: string; quickCreate: null }) {
+  return mount(CreateLessonModal, {
+    attachTo: document.body,
+    props,
+    global: { plugins: [createPinia()] },
+  })
+}
 
 const students: Student[] = [{
   id: 3,
@@ -27,9 +36,8 @@ describe('CreateLessonModal', () => {
   })
 
   it('shows selected student context and a live estimate', async () => {
-    const wrapper = mount(CreateLessonModal, {
-      attachTo: document.body,
-      props: { students, defaultDuration: 1.5, currencySymbol: '¥', quickCreate: null },
+    const wrapper = mountModal({
+      students, defaultDuration: 1.5, currencySymbol: '¥', quickCreate: null,
     })
     await nextTick()
 
@@ -46,9 +54,8 @@ describe('CreateLessonModal', () => {
 
   it('disables closing and the submit action while pending', async () => {
     vi.mocked(lessonsApi.create).mockImplementation(() => new Promise(() => {}))
-    const wrapper = mount(CreateLessonModal, {
-      attachTo: document.body,
-      props: { students, defaultDuration: 1, currencySymbol: '¥', quickCreate: null },
+    const wrapper = mountModal({
+      students, defaultDuration: 1, currencySymbol: '¥', quickCreate: null,
     })
     await nextTick()
 

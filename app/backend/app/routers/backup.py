@@ -1,11 +1,13 @@
 """备份/恢复路由。"""
 
+import asyncio
 import sqlite3
 import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
 from app.config import Settings, get_settings
 from app.database import engine
@@ -16,6 +18,9 @@ from app.services.restore_service import (
 )
 
 router = APIRouter(tags=["backup"])
+
+# restore 在进程内串行化，避免并发替换窗口期冲突
+_restore_lock = asyncio.Lock()
 
 
 @router.get("/backup")
@@ -36,6 +41,7 @@ def download_backup(settings: Settings = Depends(get_settings)):
         path=tmp_path,
         filename="kebiao-backup.db",
         media_type="application/octet-stream",
+        background=BackgroundTask(tmp_path.unlink, missing_ok=True),
     )
 
 
@@ -51,15 +57,16 @@ async def upload_restore(
             detail="须带 X-Confirm-Restore: yes 头部以确认覆盖操作",
         )
     db_path = Path(settings.DB_PATH).resolve()
-    try:
-        result = await restore_database(
-            file,
-            db_path,
-            max_bytes=settings.MAX_RESTORE_BYTES,
-            dispose_connections=engine.dispose,
-        )
-    except RestoreValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RestoreOperationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    async with _restore_lock:
+        try:
+            result = await restore_database(
+                file,
+                db_path,
+                max_bytes=settings.MAX_RESTORE_BYTES,
+                dispose_connections=engine.dispose,
+            )
+        except RestoreValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RestoreOperationError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"ok": True, **result.__dict__}

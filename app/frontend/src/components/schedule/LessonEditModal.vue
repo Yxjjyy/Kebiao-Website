@@ -61,6 +61,13 @@ function resetFeedback() {
   error.value = ''
 }
 
+// 与后端 ALLOWED_STATUS_TRANSITIONS 一致：仅当前状态与"待上"可作为目标
+const allowedTargets = computed<Lesson['status'][]>(() => {
+  const current = props.lesson?.status ?? '待上'
+  if (current === '待上') return ['待上', '已完成']
+  return [current, '待上']
+})
+
 async function updateStatus(status: Lesson['status']) {
   if (!props.lesson || busy.value) return
   resetFeedback()
@@ -86,13 +93,22 @@ async function updateLesson() {
   resetFeedback()
   saving.value = true
   try {
-    await lessonsApi.update(props.lesson.id, {
+    const payload: {
+      date: string
+      start_time: string
+      duration_hours: number
+      status?: Lesson['status']
+      note: string | null
+    } = {
       date: editForm.date,
       start_time: editForm.start_time,
       duration_hours: editForm.duration_hours,
-      status: editForm.status,
       note: editForm.note || null,
-    })
+    }
+    if (editForm.status !== props.lesson.status) {
+      payload.status = editForm.status
+    }
+    await lessonsApi.update(props.lesson.id, payload)
     message.value = '课时信息已保存'
     toast.show('课时已保存')
     emit('refresh')
@@ -146,9 +162,9 @@ async function removeLesson() {
       <section aria-labelledby="lesson-quick-actions">
         <h3 id="lesson-quick-actions" class="mb-2 text-xs font-semibold text-[var(--text-dim)]">快捷操作</h3>
         <div class="flex flex-wrap gap-2">
-          <AsyncButton type="button" tone="ghost" size="sm" :pending="statusUpdating === '已完成'" :disabled="busy" pending-label="完成中…" @click="updateStatus('已完成')">完成</AsyncButton>
-          <AsyncButton type="button" tone="ghost" size="sm" :pending="statusUpdating === '请假'" :disabled="busy" pending-label="请假中…" @click="error = ''; confirmCancelOpen = true">请假</AsyncButton>
-          <AsyncButton type="button" tone="ghost" size="sm" :pending="statusUpdating === '待上'" :disabled="busy" pending-label="恢复中…" @click="updateStatus('待上')">恢复</AsyncButton>
+          <AsyncButton v-if="lesson.status === '待上'" type="button" tone="ghost" size="sm" :pending="statusUpdating === '已完成'" :disabled="busy" pending-label="完成中…" @click="updateStatus('已完成')">完成</AsyncButton>
+          <AsyncButton v-if="lesson.status === '待上'" type="button" tone="ghost" size="sm" :pending="statusUpdating === '请假'" :disabled="busy" pending-label="请假中…" @click="error = ''; confirmCancelOpen = true">请假</AsyncButton>
+          <AsyncButton v-if="lesson.status !== '待上'" type="button" tone="ghost" size="sm" :pending="statusUpdating === '待上'" :disabled="busy" pending-label="恢复中…" @click="updateStatus('待上')">恢复</AsyncButton>
           <button type="button" class="btn-ghost btn-sm" :disabled="busy" @click="downloadICS(lesson, studentName)">加入日历</button>
           <button type="button" data-action="delete-lesson" class="btn-danger btn-sm" :disabled="busy" @click="confirmDeleteOpen = true">删除</button>
         </div>
@@ -166,8 +182,7 @@ async function removeLesson() {
         <FormField for-id="edit-lesson-status" label="状态">
           <template #default="{ describedby }">
             <select id="edit-lesson-status" v-model="editForm.status" class="input" :disabled="busy" :aria-describedby="describedby || undefined">
-              <option value="待上">待上</option><option value="已完成">已完成</option>
-              <option value="请假">请假</option><option value="已调课">已调课</option>
+              <option v-for="target in allowedTargets" :key="target" :value="target">{{ target }}</option>
             </select>
           </template>
         </FormField>

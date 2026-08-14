@@ -5,7 +5,9 @@ import { lessonsApi } from '@/api/lessons'
 import { formatHourMinute, formatShortDate, formatWeekday, isToday } from '@/lib/date'
 import { formatCurrency, formatHours } from '@/lib/format'
 import { useToast } from '@/composables/useToast'
+import { useSettingsStore } from '@/stores/settings'
 
+const settingsStore = useSettingsStore()
 const toast = useToast()
 
 const props = defineProps<{
@@ -26,6 +28,8 @@ const lessons = ref<Lesson[]>([])
 const loading = ref(false)
 const editingNoteId = ref<number | null>(null)
 const editingNoteValue = ref('')
+const loadError = ref('')
+let dayRequestId = 0
 
 function startEditNote(lesson: Lesson) {
   editingNoteId.value = lesson.id
@@ -40,12 +44,15 @@ async function saveNote(lessonId: number) {
   if (editingNoteId.value === null) return
   const note = editingNoteValue.value || null
   const idx = lessons.value.findIndex((l) => l.id === lessonId)
+  const previousNote = idx !== -1 ? lessons.value[idx].note : null
   if (idx !== -1) lessons.value[idx] = { ...lessons.value[idx], note }
   editingNoteId.value = null
   editingNoteValue.value = ''
   try {
     await lessonsApi.update(lessonId, { note })
   } catch {
+    // 保存失败回滚本地乐观更新，避免界面显示未生效的假数据
+    if (idx !== -1) lessons.value[idx] = { ...lessons.value[idx], note: previousNote }
     toast.show('备注保存失败')
   }
 }
@@ -88,22 +95,37 @@ function lessonBg(color: string) {
 }
 
 const dateLabel = computed(() => formatWeekday(props.dateIso) + ' ' + formatShortDate(props.dateIso))
-const todayClass = computed(() => isToday(props.dateIso))
+const todayClass = computed(() => isToday(props.dateIso, settingsStore.settings.timezone))
 
 const nowLineTop = computed(() => {
   if (!todayClass.value) return null
-  const now = new Date()
-  const value = now.getHours() + now.getMinutes() / 60
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: settingsStore.settings.timezone,
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const valueMap = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  const value = Number(valueMap.hour) + Number(valueMap.minute) / 60
   if (value < startHour.value || value > endHour.value + 1) return null
   return ((value - startHour.value) / Math.max(1, endHour.value - startHour.value + 1)) * 100
 })
 
 async function fetchDay() {
+  const requestId = ++dayRequestId
   loading.value = true
+  loadError.value = ''
   try {
-    lessons.value = await lessonsApi.list(props.dateIso, props.dateIso)
+    const rows = await lessonsApi.list(props.dateIso, props.dateIso)
+    if (requestId !== dayRequestId) return
+    lessons.value = rows
+  } catch {
+    if (requestId === dayRequestId) {
+      loadError.value = '课程加载失败，请稍后重试'
+      lessons.value = []
+    }
   } finally {
-    loading.value = false
+    if (requestId === dayRequestId) loading.value = false
   }
 }
 
@@ -113,6 +135,9 @@ watch(() => props.refreshKey, () => { fetchDay() })
 
 <template>
   <section class="glass p-4 md:p-5">
+    <p v-if="loadError" class="mb-3 rounded-xl bg-red-500/10 px-3 py-2 text-center text-xs text-red-500">
+      {{ loadError }}
+    </p>
     <h3
       :class="[
         'mb-3 text-center text-sm font-semibold',

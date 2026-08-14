@@ -141,6 +141,7 @@ export interface ConflictDetail {
 }
 
 export interface ConflictResponse {
-  error: 'time_conflict'
+  error?: string
+  message?: string
   conflicts: ConflictDetail[]
 }

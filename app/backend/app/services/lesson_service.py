@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Lesson, ScheduleTemplate, Settings, Student
+from app.models import Lesson, ScheduleTemplate, Settings, Student, TemplateLessonTombstone
 from app.schemas.lesson import LessonCreate, LessonReschedule, LessonUpdate
 from app.timeutil import (
     iter_dates_for_weekday,
@@ -100,6 +100,7 @@ def materialize_template(
     *,
     from_date: date | None = None,
     to_date: date | None = None,
+    commit: bool = True,
 ) -> int:
     """为模板生成 lesson 实例。返回新增数量。支持 repeat_interval 隔周。"""
     student = db.get(Student, template.student_id)
@@ -141,10 +142,21 @@ def materialize_template(
         .scalars()
         .all()
     )
+    # 用户删除过的日期不重建（墓碑机制）
+    tombstoned_dates = set(
+        db.execute(
+            select(TemplateLessonTombstone.date).where(
+                TemplateLessonTombstone.template_id == template.id,
+                TemplateLessonTombstone.date.in_(target_dates),
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     created = 0
     for d in target_dates:
-        if d in existing_dates:
+        if d in existing_dates or d in tombstoned_dates:
             continue
         # 若该时段有冲突（来自其他模板/临时课），跳过
         conflicts = find_conflicts(
@@ -166,7 +178,8 @@ def materialize_template(
         )
         db.add(lesson)
         created += 1
-    db.commit()
+    if commit:
+        db.commit()
     return created
 
 
@@ -175,19 +188,22 @@ def regenerate_template_future(
     template: ScheduleTemplate,
     *,
     from_date: date,
+    commit: bool = True,
 ) -> int:
-    """删除该模板从 from_date 起所有未上的 lesson，再重新生成。"""
+    """删除该模板从 from_date 起所有未上的 lesson（排除调课生成的新课时），再重新生成。"""
     db.execute(
         Lesson.__table__.delete().where(
             and_(
                 Lesson.template_id == template.id,
                 Lesson.date >= from_date,
                 Lesson.status == "待上",
+                Lesson.rescheduled_from_id.is_(None),
             )
         )
     )
-    db.commit()
-    return materialize_template(db, template, from_date=from_date)
+    if commit:
+        db.commit()
+    return materialize_template(db, template, from_date=from_date, commit=commit)
 
 
 def roll_forward_all_templates(db: Session) -> int:
@@ -204,25 +220,19 @@ def roll_forward_all_templates(db: Session) -> int:
 
 
 def auto_complete_past_lessons(db: Session) -> int:
-    """每日 00:05：把过期的 待上 自动转 已完成。"""
-    today_ = today()
-    current_minutes = time_to_minutes(now().time())
+    """每日 00:05：把已经结束（含跨午夜）的 待上 课程自动转 已完成。"""
+    now_ = now()
     rows = db.execute(
         select(Lesson).where(
             Lesson.status == "待上",
-            Lesson.date <= today_,
+            Lesson.date <= now_.date(),
         )
     ).scalars().all()
     completed: list[Lesson] = []
     for ls in rows:
-        end_min = lesson_end_minutes(ls.start_time, ls.duration_hours)
-        if ls.date < today_:
-            if end_min > 1440:
-                # 跨午夜课程（如23:00-01:00），折算到今天判断是否已结束
-                if end_min - 1440 >= current_minutes:
-                    continue
-            completed.append(ls)
-        elif end_min < current_minutes:
+        start_dt = datetime.combine(ls.date, datetime.strptime(ls.start_time, "%H:%M").time())
+        end_dt = start_dt + timedelta(hours=ls.duration_hours)
+        if end_dt.replace(tzinfo=now_.tzinfo) < now_:
             completed.append(ls)
     for ls in completed:
         ls.status = "已完成"
@@ -269,7 +279,12 @@ def _transition_lesson(db: Session, lesson: Lesson, target: str) -> Lesson:
         if lesson.status == "已调课" and lesson.rescheduled_to_id:
             new_lesson = db.get(Lesson, lesson.rescheduled_to_id)
             if new_lesson:
-                new_lesson.rescheduled_from_id = None
+                if new_lesson.status == "待上":
+                    # 恢复旧课时时同步取消替换生成的新课，避免新旧双排
+                    new_lesson.status = "请假"
+                    new_lesson.rescheduled_from_id = None
+                else:
+                    new_lesson.rescheduled_from_id = None
             lesson.rescheduled_to_id = None
     lesson.status = target
     return lesson
@@ -293,6 +308,14 @@ def _restore_lesson(db: Session, lesson: Lesson) -> Lesson:
 
 
 def _delete_lesson(db: Session, lesson: Lesson) -> None:
+    if lesson.template_id and lesson.date >= today():
+        # 记录墓碑，防止夜间滚动任务/模板生成重建该课时
+        db.add(
+            TemplateLessonTombstone(
+                template_id=lesson.template_id,
+                date=lesson.date,
+            )
+        )
     db.delete(lesson)
 
 

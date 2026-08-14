@@ -9,7 +9,11 @@ import InlineAlert from '@/components/ui/InlineAlert.vue'
 import { useToast } from '@/composables/useToast'
 import { formatCurrency } from '@/lib/format'
 import { parseFormError } from '@/lib/formError'
+import { getBusinessTodayIso } from '@/lib/date'
+import { useSettingsStore } from '@/stores/settings'
 import LessonTimeFields from './LessonTimeFields.vue'
+
+const settingsStore = useSettingsStore()
 
 const props = defineProps<{
   students: Student[]
@@ -26,7 +30,7 @@ const emit = defineEmits<{
 const toast = useToast()
 const form = reactive({
   student_id: 0,
-  date: new Date().toISOString().slice(0, 10),
+  date: getBusinessTodayIso(settingsStore.settings.timezone),
   start_time: '10:00',
   duration_hours: 1,
   note: '',

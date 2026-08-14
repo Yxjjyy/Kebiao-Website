@@ -19,6 +19,8 @@ const emit = defineEmits<{
 
 const lessons = ref<Lesson[]>([])
 const loading = ref(false)
+const loadError = ref('')
+let monthRequestId = 0
 
 const monthStart = computed(() => startOfMonth(props.baseDate))
 const gridStart = computed(() => startOfWeek(monthStart.value, { weekStartsOn: 1 }))
@@ -60,13 +62,22 @@ function monthTitle() {
 const weekdayHeaders = ['一', '二', '三', '四', '五', '六', '日']
 
 async function fetchMonth() {
+  const requestId = ++monthRequestId
   loading.value = true
+  loadError.value = ''
   try {
     const from = toIsoDate(gridStart.value)
     const to = toIsoDate(gridEnd.value)
-    lessons.value = await lessonsApi.list(from, to)
+    const rows = await lessonsApi.list(from, to)
+    if (requestId !== monthRequestId) return
+    lessons.value = rows
+  } catch {
+    if (requestId === monthRequestId) {
+      loadError.value = '课程加载失败，请稍后重试'
+      lessons.value = []
+    }
   } finally {
-    loading.value = false
+    if (requestId === monthRequestId) loading.value = false
   }
 }
 
@@ -76,6 +87,9 @@ watch(() => props.refreshKey, () => { fetchMonth() })
 
 <template>
   <section class="glass p-4 md:p-5">
+    <p v-if="loadError" class="mb-3 rounded-xl bg-red-500/10 px-3 py-2 text-center text-xs text-red-500">
+      {{ loadError }}
+    </p>
     <h3 class="mb-3 text-center text-sm font-semibold">{{ monthTitle() }}</h3>
 
     <div class="grid grid-cols-7 gap-px rounded-xl bg-white/30 p-1 dark:bg-white/5">

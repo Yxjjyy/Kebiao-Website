@@ -1,12 +1,14 @@
 import os
+import secrets
 import sqlite3
 import tempfile
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import UploadFile
+
+from app.timeutil import now
 
 CORE_TABLES = {
     "students",
@@ -94,8 +96,10 @@ async def restore_database(
     )
     os.close(descriptor)
     temporary = Path(temporary_name)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup = db_path.with_name(f"{db_path.stem}-before-restore-{timestamp}.db")
+    timestamp = now().strftime("%Y%m%d-%H%M%S-%f")
+    backup = db_path.with_name(
+        f"{db_path.stem}-before-restore-{timestamp}-{secrets.token_hex(2)}.db"
+    )
     rollback = db_path.with_name(f".restore-rollback-{db_path.name}")
     replaced = False
     original_moved = False

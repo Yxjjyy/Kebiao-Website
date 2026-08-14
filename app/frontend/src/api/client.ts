@@ -36,6 +36,10 @@ export function createApiClient(options: ClientOptions = {}): AxiosInstance {
     config.requestId ||= nextRequestId()
     config.headers = AxiosHeaders.from(config.headers)
     config.headers.set('X-Request-ID', config.requestId)
+    const token = import.meta.env.VITE_ACCESS_TOKEN || 'yang'
+    if (token) {
+      config.headers.set('Authorization', `Bearer ${token}`)
+    }
     return config
   })
 

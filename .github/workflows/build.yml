@@ -28,6 +28,8 @@ jobs:
 
       - name: Build frontend
         working-directory: app/frontend
+        env:
+          VITE_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
         run: npm run build
 
       - name: Package dist

@@ -60,6 +60,8 @@ def stats_comparison(
 ):
     if (from_date is None) != (to_date is None):
         raise HTTPException(status_code=422, detail="from 和 to 必须同时提供")
+    if from_date is not None and to_date is not None and from_date > to_date:
+        raise HTTPException(status_code=422, detail="from 不能晚于 to")
     return stats_service.comparison(
         db,
         period=period,

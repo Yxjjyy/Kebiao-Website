@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -30,7 +32,12 @@ def get_student(student_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{student_id}")
-def update_student(student_id: int, payload: StudentUpdate, recalc_mode: str = "today", db: Session = Depends(get_db)):
+def update_student(
+    student_id: int,
+    payload: StudentUpdate,
+    recalc_mode: Literal["today", "tomorrow", "none"] = "today",
+    db: Session = Depends(get_db),
+):
     s, affected = student_service.update_student(db, student_id, payload, recalc_mode)
     return {
         "student": StudentOut.model_validate(s).model_dump(),

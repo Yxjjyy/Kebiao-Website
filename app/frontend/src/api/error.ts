@@ -23,10 +23,14 @@ function headerValue(headers: unknown, name: string): string {
 }
 
 function conflictMessage(detail: ConflictResponse): string {
-  const conflicts = detail.conflicts
-    .map(item => `${item.student_name} · ${item.date} ${item.start_time.slice(0, 5)}`)
-    .join('；')
-  return `时间冲突：${conflicts}`
+  if (typeof detail.message === 'string' && detail.message) return detail.message
+  if (Array.isArray(detail.conflicts) && detail.conflicts.length) {
+    const conflicts = detail.conflicts
+      .map(item => `${item.student_name} · ${item.date} ${item.start_time.slice(0, 5)}`)
+      .join('；')
+    return `时间冲突：${conflicts}`
+  }
+  return '数据冲突，请检查后重试'
 }
 
 export function toAppError(error: unknown): AppError {
@@ -49,8 +53,7 @@ export function toAppError(error: unknown): AppError {
   if (status === 409 || (typeof detail === 'object' && detail?.error === 'time_conflict')) {
     return {
       kind: 'conflict',
-      message: typeof detail === 'object' && detail.error === 'time_conflict'
-        ? conflictMessage(detail)
+      message: typeof detail === 'object' ? conflictMessage(detail)
         : typeof detail === 'string' ? detail : '数据冲突，请检查后重试',
       status,
       requestId,
@@ -76,6 +79,16 @@ export function toAppError(error: unknown): AppError {
       requestId,
       detail,
       retryable: status === 502 || status === 503 || status === 504,
+    }
+  }
+  if (status === 401) {
+    return {
+      kind: 'unknown',
+      message: '认证失败，请检查访问令牌配置',
+      status,
+      requestId,
+      detail,
+      retryable: false,
     }
   }
   return {
