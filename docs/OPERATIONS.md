@@ -12,8 +12,9 @@
 | 数据库 | SQLite `/home/kebiao/data/app-v2.db`（源库 `/home/kebiao/data/app.db` 不动） |
 | 前端 | Vue 3 + Vite，**由 GitHub Actions 构建**，服务器不跑 Node |
 | 进程 | systemd：`kebiao-backend-v2`、`caddy` |
-| 日志 | Caddy 访问日志 `/var/log/caddy/kebiao-access.log`；后端 `/var/log/kebiao/*-v2.log` |
-| 备份 | `app/deploy/backup.sh`，cron 每 6 小时（0,6,12,18 点），存 `/home/kebiao/backups/` |
+| 日志 | Caddy 访问日志 `/var/log/caddy/kebiao-access.log`；后端 `/var/log/kebiao/*-v2.log`；均配置 logrotate（每日轮转、gzip 压缩、保留 14 天） |
+| 备份 | `app/deploy/backup.sh`，cron 每 6 小时（0,6,12,18 点），存 `/home/kebiao/backups/`（保留 7 天） |
+| 内存监控 | `app/deploy/mem-watch.sh`（安装到 `/usr/local/bin/`，root cron 每 5 分钟）：MemAvailable<150MB 写告警 `/var/log/kebiao/mem-watch.log` |
 
 ## 2. 认证与会话（安全核心）
 
