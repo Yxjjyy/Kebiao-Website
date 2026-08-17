@@ -1,0 +1,26 @@
+[Unit]
+Description=Kebiao Backend API v2
+After=network.target
+
+[Service]
+User=kebiao
+Group=kebiao
+WorkingDirectory=/home/kebiao/app-v2/app/backend
+EnvironmentFile=/home/kebiao/app-v2/app/backend/.env
+ExecStart=/home/kebiao/app-v2/app/backend/.venv/bin/gunicorn app.main:app \
+    --workers 1 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --max-requests 500 \
+    --max-requests-jitter 50 \
+    --bind 127.0.0.1:8001 \
+    --access-logfile /var/log/kebiao/access-v2.log \
+    --error-logfile /var/log/kebiao/error-v2.log \
+    --log-level info
+Restart=always
+RestartSec=3
+# 内存防护：服务器仅 1.6GB 内存，防止进程失控吃满内存导致系统崩溃
+MemoryMax=512M
+MemorySwapMax=1024M
+
+[Install]
+WantedBy=multi-user.target

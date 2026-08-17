@@ -79,13 +79,18 @@ def test_deleted_template_lesson_not_recreated_by_materialize(db_session, monkey
     created = lesson_service.materialize_template(
         db_session, template, from_date=date(2026, 8, 13), to_date=date(2026, 8, 31)
     )
+    # 软删除语义：原课时行保留但标记为已删除，不重建新行
+    deleted_row = db_session.get(Lesson, lesson.id)
+    assert deleted_row is not None
+    assert deleted_row.status == "已删除"
     dates = {
         d for d in (
             db_session.execute(select(Lesson.date).where(Lesson.template_id == template.id)).scalars()
         )
     }
-    assert date(2026, 8, 20) not in dates
-    assert created == 2  # 8/20 与 8/27 中 8/20 被墓碑跳过
+    assert date(2026, 8, 20) in dates
+    assert sum(1 for d in dates if d == date(2026, 8, 20)) == 1
+    assert created == 2  # 8/13 与 8/27 中 8/20 由墓碑/占位行跳过
 
 
 def test_restore_rescheduled_cancels_replacement(db_session, monkeypatch):

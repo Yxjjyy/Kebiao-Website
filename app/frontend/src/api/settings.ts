@@ -11,6 +11,4 @@ export const settingsApi = {
 
   updateProfile: (data: Partial<UserProfile>) =>
     api.patch<UserProfile>('/profile', data).then((r) => r.data),
-
-  verifyToken: () => api.post<{ ok: boolean }>('/auth/verify').then((r) => r.data),
 }

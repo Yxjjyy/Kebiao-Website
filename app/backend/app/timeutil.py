@@ -26,6 +26,13 @@ def today(
     return now(timezone_name, instant=instant).date()
 
 
+def ensure_aware(dt: datetime, timezone_name: str | None = None) -> datetime:
+    """SQLite 存储的 DateTime 是 naive 的，比较前统一补上应用时区。"""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=ZoneInfo(timezone_name or get_settings().TIMEZONE))
+    return dt
+
+
 def parse_date(s: str) -> date:
     return date.fromisoformat(s)
 

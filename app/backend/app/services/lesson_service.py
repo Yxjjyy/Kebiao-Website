@@ -248,6 +248,7 @@ ALLOWED_STATUS_TRANSITIONS = {
     "已完成": {"已完成", "待上"},
     "请假": {"请假", "待上"},
     "已调课": {"已调课", "待上"},
+    "已删除": {"已删除"},
 }
 
 
@@ -304,10 +305,34 @@ def _cancel_lesson(lesson: Lesson, note: str | None = None) -> Lesson:
 def _restore_lesson(db: Session, lesson: Lesson) -> Lesson:
     if lesson.status == "待上":
         return lesson
+    if lesson.status == "已删除":
+        target = lesson.deleted_from or "待上"
+        lesson.deleted_from = None
+        if target == "待上":
+            raise_if_conflict(
+                db,
+                on_date=lesson.date,
+                start_time=lesson.start_time,
+                duration_hours=lesson.duration_hours,
+                exclude_lesson_id=lesson.id,
+            )
+            if lesson.rescheduled_to_id:
+                new_lesson = db.get(Lesson, lesson.rescheduled_to_id)
+                if new_lesson:
+                    if new_lesson.status == "待上":
+                        new_lesson.status = "请假"
+                        new_lesson.rescheduled_from_id = None
+                    else:
+                        new_lesson.rescheduled_from_id = None
+                lesson.rescheduled_to_id = None
+        lesson.status = target
+        return lesson
     return _transition_lesson(db, lesson, "待上")
 
 
 def _delete_lesson(db: Session, lesson: Lesson) -> None:
+    if lesson.status == "已删除":
+        return
     if lesson.template_id and lesson.date >= today():
         # 记录墓碑，防止夜间滚动任务/模板生成重建该课时
         db.add(
@@ -316,7 +341,8 @@ def _delete_lesson(db: Session, lesson: Lesson) -> None:
                 date=lesson.date,
             )
         )
-    db.delete(lesson)
+    lesson.deleted_from = lesson.status
+    lesson.status = "已删除"
 
 
 def list_lessons(
@@ -333,6 +359,7 @@ def list_lessons(
     )
     if student_id is not None:
         stmt = stmt.where(Lesson.student_id == student_id)
+    stmt = stmt.where(Lesson.status != "已删除")
     stmt = stmt.order_by(Lesson.date, Lesson.start_time)
     return list(db.execute(stmt).scalars().all())
 

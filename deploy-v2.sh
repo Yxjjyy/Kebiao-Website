@@ -10,6 +10,14 @@ VENV="$APP_DIR/app/backend/.venv/bin"
 
 echo "=== 课表 v2 部署开始 $(date +%F\ %T) ==="
 
+# 0. 内存闸门：服务器仅 1.6GB 内存，内存不足时暂停部署防 OOM 崩溃
+MEM_AVAIL=$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo)
+if [ "$MEM_AVAIL" -lt 300 ]; then
+  echo "!!! 内存不足 (可用 ${MEM_AVAIL}MB < 300MB)，暂停部署，稍后重试"
+  exit 1
+fi
+echo ">>> 内存检查通过 (可用 ${MEM_AVAIL}MB)"
+
 # 1. 下载前端构建产物（公开仓库，匿名免认证）
 echo ">>> 下载前端产物..."
 curl -sfL --retry 4 --retry-delay 3 --retry-all-errors -o /tmp/kebiao-dist.zip "$RELEASE_URL/kebiao-dist.zip"

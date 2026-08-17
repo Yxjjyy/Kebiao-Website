@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_ACCESS_TOKEN?: string
+  // 登录凭据仅存后端，前端不再注入任何令牌
 }
 
 interface ImportMeta {

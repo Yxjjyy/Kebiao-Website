@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     ACCESS_TOKEN: str = "dev-token-change-me"
+    LOGIN_USERNAME: str = "yang"
+    LOGIN_PASSWORD: str = ""
+    SESSION_TTL_DAYS: int = 365
     DB_PATH: str = "./data/app.db"
     TIMEZONE: str = "Asia/Shanghai"
     CORS_ORIGINS: str = "http://localhost:5173"

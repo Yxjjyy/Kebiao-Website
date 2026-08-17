@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosHeaders, type AxiosAdapter, type AxiosInstance } from 'axios'
 import { createRequestId } from './requestId'
+import { getSessionToken, setSessionToken } from '@/lib/session'
 
 declare module 'axios' {
   export interface InternalAxiosRequestConfig {
@@ -23,6 +24,12 @@ function canRetry(error: AxiosError): boolean {
   return retryableStatuses.has(error.response.status)
 }
 
+function redirectToLogin() {
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
+}
+
 export function createApiClient(options: ClientOptions = {}): AxiosInstance {
   const nextRequestId = options.requestId ?? createRequestId
   const sleep = options.sleep ?? ((delay: number) => new Promise(resolve => setTimeout(resolve, delay)))
@@ -36,7 +43,7 @@ export function createApiClient(options: ClientOptions = {}): AxiosInstance {
     config.requestId ||= nextRequestId()
     config.headers = AxiosHeaders.from(config.headers)
     config.headers.set('X-Request-ID', config.requestId)
-    const token = import.meta.env.VITE_ACCESS_TOKEN || 'yang'
+    const token = getSessionToken()
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`)
     }
@@ -44,6 +51,14 @@ export function createApiClient(options: ClientOptions = {}): AxiosInstance {
   })
 
   client.interceptors.response.use(undefined, async (error: unknown) => {
+    if (error instanceof AxiosError && error.response?.status === 401) {
+      const url = error.config?.url ?? ''
+      if (!url.includes('/auth/login')) {
+        setSessionToken(null)
+        redirectToLogin()
+      }
+      return Promise.reject(error)
+    }
     if (!(error instanceof AxiosError) || !error.config || !canRetry(error)) {
       return Promise.reject(error)
     }

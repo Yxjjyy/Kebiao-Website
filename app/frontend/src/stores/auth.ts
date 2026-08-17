@@ -1,34 +1,27 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { settingsApi } from '@/api/settings'
+import { authApi } from '@/api/auth'
+import { getSessionToken, setSessionToken } from '@/lib/session'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(import.meta.env.VITE_ACCESS_TOKEN || 'yang')
+  const authenticated = ref<boolean | null>(null)
   const verifying = ref(false)
-  const authenticated = ref(true)
 
-  const isAuthenticated = computed(() => authenticated.value)
+  const isAuthenticated = computed(() => authenticated.value === true)
 
-  function loadFromStorage() {
-    authenticated.value = true
-  }
-
-  function setToken(_next: string) {
-    authenticated.value = true
-  }
-
-  function clear() {
-    authenticated.value = false
-  }
-
-  async function verify() {
-    if (verifying.value) return true
+  async function verify(): Promise<boolean> {
+    if (verifying.value) return authenticated.value === true
+    if (!getSessionToken()) {
+      authenticated.value = false
+      return false
+    }
     verifying.value = true
     try {
-      await settingsApi.verifyToken()
+      await authApi.me()
       authenticated.value = true
       return true
     } catch {
+      setSessionToken(null)
       authenticated.value = false
       return false
     } finally {
@@ -36,14 +29,28 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function login(username: string, password: string): Promise<void> {
+    const { token } = await authApi.login(username, password)
+    setSessionToken(token)
+    authenticated.value = true
+  }
+
+  async function logout(): Promise<void> {
+    try {
+      await authApi.logout()
+    } catch {
+      // 忽略登出接口异常，本地一律清除
+    }
+    setSessionToken(null)
+    authenticated.value = false
+  }
+
   return {
-    token,
-    verifying,
     authenticated,
+    verifying,
     isAuthenticated,
-    loadFromStorage,
-    setToken,
-    clear,
     verify,
+    login,
+    logout,
   }
 })

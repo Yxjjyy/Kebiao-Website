@@ -1,3 +1,5 @@
+from app.models.auth_session import AuthSession
+from app.models.audit_log import AuditLog
 from app.models.lesson import Lesson
 from app.models.settings import Settings
 from app.models.student import Student
@@ -12,4 +14,6 @@ __all__ = [
     "TemplateLessonTombstone",
     "Settings",
     "UserProfile",
+    "AuthSession",
+    "AuditLog",
 ]

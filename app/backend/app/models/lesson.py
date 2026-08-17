@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.timeutil import now
 
-LESSON_STATUS = ("待上", "已完成", "请假", "已调课")
+LESSON_STATUS = ("待上", "已完成", "请假", "已调课", "已删除")
 
 
 class Lesson(Base):
@@ -28,6 +28,7 @@ class Lesson(Base):
     start_time: Mapped[str] = mapped_column(String(5), nullable=False)
     duration_hours: Mapped[float] = mapped_column(Float, nullable=False)
     status: Mapped[str] = mapped_column(String(8), nullable=False, default="待上")
+    deleted_from: Mapped[str | None] = mapped_column(String(8), nullable=True)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     rescheduled_from_id: Mapped[int | None] = mapped_column(
