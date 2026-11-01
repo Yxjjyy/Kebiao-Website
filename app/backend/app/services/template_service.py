@@ -25,15 +25,30 @@ def get_template(db: Session, template_id: int) -> ScheduleTemplate:
     return t
 
 
+def _validate_effective_range(effective_from: date, effective_to: date | None) -> None:
+    if effective_to is not None and effective_to < effective_from:
+        raise HTTPException(
+            status_code=422,
+            detail="生效结束日期不能早于生效起始日期",
+        )
+
+
 def create_template(db: Session, payload: TemplateCreate) -> tuple[ScheduleTemplate, int]:
     student = db.get(Student, payload.student_id)
     if not student:
         raise HTTPException(status_code=404, detail="学生不存在")
+    _validate_effective_range(payload.effective_from, payload.effective_to)
     try:
         t = ScheduleTemplate(**payload.model_dump())
         db.add(t)
         db.flush()
-        created = lesson_service.materialize_template(db, t, commit=False)
+        created = lesson_service.materialize_template(
+            db,
+            t,
+            from_date=max(today(), t.effective_from),
+            commit=False,
+            strict_conflicts=True,
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -54,6 +69,10 @@ def update_template(
         raise HTTPException(status_code=422, detail="不支持的 apply_mode")
     if apply_mode == "from_date" and not apply_from:
         raise HTTPException(status_code=422, detail="apply_mode=from_date 时必须提供 apply_from_date")
+    _validate_effective_range(
+        data.get("effective_from", t.effective_from),
+        data.get("effective_to", t.effective_to),
+    )
 
     for k, v in data.items():
         setattr(t, k, v)
@@ -70,7 +89,11 @@ def update_template(
             from_date = apply_from or today()
 
         affected = lesson_service.regenerate_template_future(
-            db, t, from_date=from_date, commit=False
+            db,
+            t,
+            from_date=from_date,
+            commit=False,
+            strict_conflicts=True,
         )
         db.commit()
     except Exception:

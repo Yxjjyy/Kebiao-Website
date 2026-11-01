@@ -8,6 +8,18 @@ DIST_DIR="$APP_DIR/app/frontend/dist"
 SERVICE=kebiao-backend-v2
 VENV="$APP_DIR/app/backend/.venv/bin"
 
+# 可选：GitHub 主域名 IP 不可达时，指定备用 IP。
+# 用法：sudo env GITHUB_IP=20.27.177.113 bash deploy-v2.sh
+GITHUB_IP="${GITHUB_IP:-}"
+CURL_RESOLVE=()
+if [ -n "$GITHUB_IP" ]; then
+  CURL_RESOLVE=(--resolve "github.com:443:$GITHUB_IP")
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0=http.curloptResolve
+  export GIT_CONFIG_VALUE_0="github.com:443:$GITHUB_IP"
+  echo ">>> 使用 GitHub IP 覆盖: $GITHUB_IP"
+fi
+
 echo "=== 课表 v2 部署开始 $(date +%F\ %T) ==="
 
 # 0. 内存闸门：服务器仅 1.6GB 内存，内存不足时暂停部署防 OOM 崩溃
@@ -20,8 +32,8 @@ echo ">>> 内存检查通过 (可用 ${MEM_AVAIL}MB)"
 
 # 1. 下载前端构建产物（公开仓库，匿名免认证）
 echo ">>> 下载前端产物..."
-curl -sfL --retry 4 --retry-delay 3 --retry-all-errors -o /tmp/kebiao-dist.zip "$RELEASE_URL/kebiao-dist.zip"
-curl -sfL --retry 4 --retry-delay 3 --retry-all-errors -o /tmp/build-info.txt "$RELEASE_URL/build-info.txt" || true
+curl -sfL --retry 4 --retry-delay 3 --retry-all-errors "${CURL_RESOLVE[@]}" -o /tmp/kebiao-dist.zip "$RELEASE_URL/kebiao-dist.zip"
+curl -sfL --retry 4 --retry-delay 3 --retry-all-errors "${CURL_RESOLVE[@]}" -o /tmp/build-info.txt "$RELEASE_URL/build-info.txt" || true
 [ -f /tmp/build-info.txt ] && grep -E "BUILD_SHA|BUILD_TIME" /tmp/build-info.txt || echo "无 build-info"
 
 # 版本检查：远端构建 SHA 与当前部署版本一致则跳过（无新版本）

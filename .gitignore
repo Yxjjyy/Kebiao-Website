@@ -21,6 +21,7 @@ venv/
 # Node / frontend build output
 node_modules/
 dist/
+dist.bak.*/
 *.tsbuildinfo
 
 # Editors and operating systems

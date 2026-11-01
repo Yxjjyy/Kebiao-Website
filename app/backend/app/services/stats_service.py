@@ -33,7 +33,10 @@ def today_summary(db: Session) -> TodayStats:
         db.execute(
             select(Lesson)
             .options(selectinload(Lesson.student))
-            .where(Lesson.date == today_)
+            .where(
+                Lesson.date == today_,
+                Lesson.status != "已删除",
+            )
             .order_by(Lesson.start_time)
         )
         .scalars()

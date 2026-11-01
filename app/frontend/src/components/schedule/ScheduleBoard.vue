@@ -4,6 +4,7 @@ import type { Lesson } from '@/api/types'
 import { formatHourMinute, formatShortDate, formatWeekday, getWeekDays, getBusinessTodayIso, isToday, toIsoDate } from '@/lib/date'
 import { formatCurrency, formatHours } from '@/lib/format'
 import { resolveSelectedDate } from '@/lib/scheduleDashboard'
+import { computeLessonLanes, type LessonLane } from '@/lib/scheduleLayout'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -37,8 +38,6 @@ const emit = defineEmits<{
 const draggingLessonId = ref<number | null>(null)
 const dragOverSlotKey = ref<string | null>(null)
 const dragOverConflict = ref(false)
-const showUndo = ref(false)
-const undoInfo = ref('')
 const editingNoteId = ref<number | null>(null)
 const editingNoteValue = ref('')
 const selectedMobileDate = ref('')
@@ -95,7 +94,12 @@ watch(
 )
 
 const grouped = computed(() =>
-  weekdays.value.map((day) => ({ ...day, lessons: props.lessons.filter((l) => l.date === day.iso).sort((a, b) => a.start_time.localeCompare(b.start_time)) }))
+  weekdays.value.map((day) => {
+    const lessons = props.lessons
+      .filter((l) => l.date === day.iso)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+    return { ...day, lessons, lanes: computeLessonLanes(lessons) }
+  })
 )
 const selectedMobileDay = computed(() =>
   grouped.value.find((day) => day.iso === selectedMobileDate.value) ?? grouped.value[0]
@@ -121,9 +125,21 @@ function lessonStyle(lesson: Lesson) {
   return { top: `${Math.max(0, ((hour - startHour.value) * 60 + minute) / totalMinutes.value * 100)}%`, height: `${Math.max(3, lesson.duration_hours * 60 / totalMinutes.value * 100)}%` }
 }
 
+function laneStyle(layout?: LessonLane) {
+  if (!layout || layout.lanes <= 1) return { left: '0.375rem', width: 'calc(100% - 0.75rem)' }
+  return {
+    left: `calc(${layout.left}% + 2px)`,
+    width: `calc(${layout.width}% - 4px)`,
+  }
+}
+
 function lessonBg(lesson: Lesson) {
   const color = lesson.student?.color ?? '#4C7DFF'
   return { background: `linear-gradient(135deg, ${color}22, ${color}18)` }
+}
+
+function lessonStatusClass(lesson: Lesson) {
+  return lesson.status === '请假' || lesson.status === '已调课' ? 'border-dashed' : ''
 }
 
 function statusClass(status: Lesson['status']) {
@@ -192,9 +208,6 @@ function onDrop(event: DragEvent, date: string, startTime: string) {
   const lesson = props.lessons.find((i) => i.id === lid)
   draggingLessonId.value = null; dragOverSlotKey.value = null
   if (!lesson) return
-  undoInfo.value = `${lesson.student?.name ?? '课程'} → ${formatShortDate(date)} ${startTime.slice(0,5)}`
-  showUndo.value = true
-  setTimeout(() => { showUndo.value = false }, 4000)
   emit('move-lesson', { lesson, date, start_time: startTime })
 }
 
@@ -249,7 +262,7 @@ function isEvenHour(slot: string) { return slot.endsWith(':00') && Number(slot.s
 
         <div v-if="dragOverSlotKey && dragOverSlotKey.startsWith(day.iso) && !dragOverConflict" class="absolute left-1.5 right-1.5 z-25 pointer-events-none rounded-xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/5" :style="{ top: `${(timeSlots.indexOf(dragOverSlotKey.split('-').slice(1).join('-')) / Math.max(1, timeSlots.length - 1)) * 100}%`, height: `${100 / Math.max(1, timeSlots.length - 1)}%` }" />
 
-        <div v-for="lesson in day.lessons" :key="lesson.id" draggable="true" :class="['group absolute left-1.5 right-1.5 z-10 cursor-pointer rounded-xl border border-white/50 px-2 py-1.5 text-left transition-all duration-150 dark:border-white/15', lesson.id === selectedLessonId ? 'ring-2 ring-[var(--accent)] ring-offset-1' : 'hover:shadow-md', lesson.id === draggingLessonId ? 'opacity-40 scale-95' : 'opacity-100']" :style="{ ...lessonStyle(lesson), ...lessonBg(lesson) }" @dragstart="onDragStart($event, lesson)" @dragend="onDragEnd" @click.stop="emit('select-lesson', lesson)" @touchstart.prevent="onLessonTouchStart($event, lesson)" @touchend="onLessonTouchEnd">
+        <div v-for="lesson in day.lessons" :key="lesson.id" draggable="true" :class="['group absolute z-10 cursor-pointer rounded-xl border border-white/50 px-2 py-1.5 text-left transition-all duration-150 dark:border-white/15', lessonStatusClass(lesson), lesson.id === selectedLessonId ? 'ring-2 ring-[var(--accent)] ring-offset-1' : 'hover:shadow-md', lesson.id === draggingLessonId ? 'opacity-40 scale-95' : 'opacity-100']" :style="{ ...lessonStyle(lesson), ...laneStyle(day.lanes.get(lesson.id)), ...lessonBg(lesson) }" @dragstart="onDragStart($event, lesson)" @dragend="onDragEnd" @click.stop="emit('select-lesson', lesson)" @touchstart.prevent="onLessonTouchStart($event, lesson)" @touchend="onLessonTouchEnd">
           <div class="flex items-center gap-1">
             <input class="h-3 w-3 rounded accent-[var(--accent)]" type="checkbox" :checked="selectedLessonIds.includes(lesson.id)" @click.stop @change.stop="emit('toggle-bulk', lesson)" />
             <span class="truncate text-[11px] font-semibold leading-tight">{{ lesson.student?.name ?? `#${lesson.student_id}` }}</span>
@@ -339,8 +352,5 @@ function isEvenHour(slot: string) { return slot.endsWith(':00') && Number(slot.s
       </div>
     </div>
 
-    <div v-if="showUndo" class="glass fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-2xl px-4 py-2.5 text-sm shadow-lg lg:bottom-6">
-      <span class="text-[var(--text)]">已移动 {{ undoInfo }}</span>
-    </div>
   </section>
 </template>

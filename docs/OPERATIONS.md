@@ -63,7 +63,7 @@ sudo systemctl restart kebiao-backend-v2
 ## 5. 开发与提交规范
 
 1. 后端改动：改完后在开发机（或按第 3 节约束在服务器）跑 `pytest`，全量须绿
-2. 前端改动：**不在服务器构建**；push 后由 `build.yml` 构建并发布 dist 到 GitHub Releases（匿名可下载，仅供部署脚本使用）
+2. 前端改动：**不在服务器构建**；push 后由 `build.yml` 先跑 `npm test`、再构建并发布 dist 到 GitHub Releases（匿名可下载，仅供部署脚本使用）
 3. **禁止**把 `LOGIN_PASSWORD`、`ACCESS_TOKEN` 写入前端代码、`.env` 之外的文件或 commit；`build.yml` 不再注入任何前端令牌
 4. 数据库结构变更必须写 alembic 迁移（`alembic/versions/00xx_*.py`），并在服务器执行 `alembic upgrade head`
 5. 登录/会话/审计/软删除相关功能，修改后必须补充/更新 pytest 用例（`tests/test_auth.py`、`test_audit_middleware.py`、`test_lesson_routes.py`）
@@ -76,6 +76,15 @@ sudo bash /home/kebiao/app-v2/deploy-v2.sh
 ```
 
 脚本流程：下载 GitHub Releases 前端产物 → 校验版本 → 备份旧 dist → 解压 → 同步后端源码（git pull）→ 增量装依赖 → `alembic upgrade head` → 修复数据库属主 → 重启 `kebiao-backend-v2` → 健康检查。内存闸门内置。
+
+**GitHub 主域名不可达时**（服务器访问 `github.com:443` 超时），使用备用 IP 覆盖：
+
+```bash
+sudo env GITHUB_IP=20.27.177.113 bash /home/kebiao/app-v2/deploy-v2.sh
+# 备用：20.200.245.247
+```
+
+`GITHUB_IP` 会同时作用于 `curl --resolve` 下载和 `git fetch`（`http.curloptResolve`）。不设置时保持默认行为。
 
 **手工部署（脚本不可用时，按顺序）：**
 ```bash

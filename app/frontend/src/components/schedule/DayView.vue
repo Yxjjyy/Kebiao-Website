@@ -3,7 +3,8 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { Lesson } from '@/api/types'
 import { lessonsApi } from '@/api/lessons'
 import { formatHourMinute, formatShortDate, formatWeekday, isToday } from '@/lib/date'
-import { formatCurrency, formatHours } from '@/lib/format'
+import { formatHours } from '@/lib/format'
+import { computeLessonLanes, type LessonLane } from '@/lib/scheduleLayout'
 import { useToast } from '@/composables/useToast'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -78,6 +79,15 @@ const timeSlots = computed(() => {
 const sortedLessons = computed(() =>
   [...lessons.value].sort((a, b) => a.start_time.localeCompare(b.start_time))
 )
+const lessonLanes = computed(() => computeLessonLanes(sortedLessons.value))
+
+function laneStyle(layout?: LessonLane) {
+  if (!layout || layout.lanes <= 1) return { left: '0.375rem', width: 'calc(100% - 0.75rem)' }
+  return {
+    left: `calc(${layout.left}% + 2px)`,
+    width: `calc(${layout.width}% - 4px)`,
+  }
+}
 
 function lessonStyle(lesson: Lesson) {
   const [hour, minute] = lesson.start_time.split(':').map(Number)
@@ -92,6 +102,10 @@ function lessonStyle(lesson: Lesson) {
 
 function lessonBg(color: string) {
   return { background: `linear-gradient(135deg, ${color}22, ${color}18)` }
+}
+
+function lessonStatusClass(lesson: Lesson) {
+  return lesson.status === '请假' || lesson.status === '已调课' ? 'border-dashed' : ''
 }
 
 const dateLabel = computed(() => formatWeekday(props.dateIso) + ' ' + formatShortDate(props.dateIso))
@@ -171,9 +185,10 @@ watch(() => props.refreshKey, () => { fetchDay() })
           v-for="lesson in sortedLessons"
           :key="lesson.id"
           :class="[
-            'absolute left-1.5 right-1.5 z-10 cursor-pointer rounded-xl border border-white/50 px-3 py-2 text-left transition-all duration-150 hover:shadow-md dark:border-white/15',
+            'absolute z-10 cursor-pointer rounded-xl border border-white/50 px-3 py-2 text-left transition-all duration-150 hover:shadow-md dark:border-white/15',
+            lessonStatusClass(lesson),
           ]"
-          :style="{ ...lessonStyle(lesson), ...lessonBg((students.find(s => s.id === lesson.student_id) || { color: '#4C7DFF' }).color) }"
+          :style="{ ...lessonStyle(lesson), ...laneStyle(lessonLanes.get(lesson.id)), ...lessonBg((students.find(s => s.id === lesson.student_id) || { color: '#4C7DFF' }).color) }"
           @click.stop="emit('select-lesson', lesson)"
         >
           <div class="flex items-center justify-between gap-2">

@@ -52,6 +52,27 @@ def find_conflicts(
     return conflicts
 
 
+def _conflict_detail(conflicts: list[Lesson]) -> list[dict]:
+    return [
+        {
+            "id": c.id,
+            "student_id": c.student_id,
+            "student_name": c.student.name if c.student else "",
+            "start_time": c.start_time,
+            "duration_hours": c.duration_hours,
+            "date": c.date.isoformat(),
+        }
+        for c in conflicts
+    ]
+
+
+def _raise_conflicts(conflicts: list[Lesson]) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"error": "time_conflict", "conflicts": _conflict_detail(conflicts)},
+    )
+
+
 def raise_if_conflict(
     db: Session,
     *,
@@ -68,21 +89,7 @@ def raise_if_conflict(
         exclude_lesson_id=exclude_lesson_id,
     )
     if conflicts:
-        detail = [
-            {
-                "id": c.id,
-                "student_id": c.student_id,
-                "student_name": c.student.name if c.student else "",
-                "start_time": c.start_time,
-                "duration_hours": c.duration_hours,
-                "date": c.date.isoformat(),
-            }
-            for c in conflicts
-        ]
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"error": "time_conflict", "conflicts": detail},
-        )
+        _raise_conflicts(conflicts)
 
 
 # ---------------------------- 实例生成 ----------------------------
@@ -101,8 +108,13 @@ def materialize_template(
     from_date: date | None = None,
     to_date: date | None = None,
     commit: bool = True,
+    strict_conflicts: bool = False,
 ) -> int:
-    """为模板生成 lesson 实例。返回新增数量。支持 repeat_interval 隔周。"""
+    """为模板生成 lesson 实例。返回新增数量。支持 repeat_interval 隔周。
+
+    strict_conflicts=True 时，遇到任何冲突都会抛 409，而不是静默跳过；
+    用于用户主动创建/编辑模板，后台滚动生成保持非严格模式。
+    """
     student = db.get(Student, template.student_id)
     if not student:
         return 0
@@ -154,11 +166,27 @@ def materialize_template(
         .all()
     )
 
+    pending_dates = [
+        d for d in target_dates if d not in existing_dates and d not in tombstoned_dates
+    ]
+    if strict_conflicts:
+        # 先做一次整体预检，确保不会只生成一部分课时
+        all_conflicts: list[Lesson] = []
+        for d in pending_dates:
+            all_conflicts.extend(
+                find_conflicts(
+                    db,
+                    on_date=d,
+                    start_time=template.start_time,
+                    duration_hours=template.duration_hours,
+                )
+            )
+        if all_conflicts:
+            _raise_conflicts(all_conflicts)
+
     created = 0
-    for d in target_dates:
-        if d in existing_dates or d in tombstoned_dates:
-            continue
-        # 若该时段有冲突（来自其他模板/临时课），跳过
+    for d in pending_dates:
+        # 若该时段有冲突（来自其他模板/临时课），跳过；严格模式下报错
         conflicts = find_conflicts(
             db,
             on_date=d,
@@ -166,6 +194,8 @@ def materialize_template(
             duration_hours=template.duration_hours,
         )
         if conflicts:
+            if strict_conflicts:
+                _raise_conflicts(conflicts)
             continue
         lesson = Lesson(
             student_id=template.student_id,
@@ -189,8 +219,12 @@ def regenerate_template_future(
     *,
     from_date: date,
     commit: bool = True,
+    strict_conflicts: bool = False,
 ) -> int:
-    """删除该模板从 from_date 起所有未上的 lesson（排除调课生成的新课时），再重新生成。"""
+    """删除该模板从 from_date 起所有未上的 lesson（排除调课生成的新课时），再重新生成。
+
+    删除与重建在同一事务中完成；strict_conflicts=True 时冲突会回滚整个操作。
+    """
     db.execute(
         Lesson.__table__.delete().where(
             and_(
@@ -201,9 +235,16 @@ def regenerate_template_future(
             )
         )
     )
+    created = materialize_template(
+        db,
+        template,
+        from_date=from_date,
+        commit=False,
+        strict_conflicts=strict_conflicts,
+    )
     if commit:
         db.commit()
-    return materialize_template(db, template, from_date=from_date, commit=commit)
+    return created
 
 
 def roll_forward_all_templates(db: Session) -> int:
@@ -307,8 +348,8 @@ def _restore_lesson(db: Session, lesson: Lesson) -> Lesson:
         return lesson
     if lesson.status == "已删除":
         target = lesson.deleted_from or "待上"
-        lesson.deleted_from = None
-        if target == "待上":
+        # 未来已完成的课时同样会占用时段；历史课时允许重叠，避免无法恢复旧记录
+        if target == "待上" or (target == "已完成" and lesson.date >= today()):
             raise_if_conflict(
                 db,
                 on_date=lesson.date,
@@ -316,6 +357,8 @@ def _restore_lesson(db: Session, lesson: Lesson) -> Lesson:
                 duration_hours=lesson.duration_hours,
                 exclude_lesson_id=lesson.id,
             )
+        lesson.deleted_from = None
+        if target == "待上":
             if lesson.rescheduled_to_id:
                 new_lesson = db.get(Lesson, lesson.rescheduled_to_id)
                 if new_lesson:
@@ -400,6 +443,8 @@ def create_lesson(db: Session, payload: LessonCreate) -> Lesson:
 def update_lesson(db: Session, lesson_id: int, payload: LessonUpdate) -> Lesson:
     ls = get_lesson(db, lesson_id)
     data = payload.model_dump(exclude_unset=True)
+    if data.get("status", ls.status) is None:
+        data.pop("status", None)
 
     new_date = data.get("date", ls.date)
     new_time = data.get("start_time", ls.start_time)

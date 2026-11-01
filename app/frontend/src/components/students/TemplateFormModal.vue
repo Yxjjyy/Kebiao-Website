@@ -38,11 +38,14 @@ async function save() {
   saving.value = true; message.value = ''; error.value = ''
   try {
     if (props.mode === 'create') {
-      await templatesApi.create({ student_id: studentId.value, day_of_week: dayOfWeek.value, start_time: startTime.value, duration_hours: durationHours.value, effective_from: effectiveFrom.value, effective_to: effectiveTo.value || null, repeat_interval: repeatInterval.value })
-      toast.show('模板已创建'); emit('refresh-templates'); emit('close')
+      const result = await templatesApi.create({ student_id: studentId.value, day_of_week: dayOfWeek.value, start_time: startTime.value, duration_hours: durationHours.value, effective_from: effectiveFrom.value, effective_to: effectiveTo.value || null, repeat_interval: repeatInterval.value })
+      toast.show(`模板已创建，已生成 ${result.generated_lessons} 节课时`); emit('refresh-templates'); emit('close')
     } else if (props.template) {
-      await templatesApi.update(props.template.id, { day_of_week: dayOfWeek.value, start_time: startTime.value, duration_hours: durationHours.value, effective_from: effectiveFrom.value, effective_to: effectiveTo.value || null, repeat_interval: repeatInterval.value, apply_mode: applyMode.value, apply_from_date: applyMode.value === 'from_date' ? applyFromDate.value : undefined })
-      message.value = '模板已更新'; toast.show(message.value); emit('refresh-templates')
+      const result = await templatesApi.update(props.template.id, { day_of_week: dayOfWeek.value, start_time: startTime.value, duration_hours: durationHours.value, effective_from: effectiveFrom.value, effective_to: effectiveTo.value || null, repeat_interval: repeatInterval.value, apply_mode: applyMode.value, apply_from_date: applyMode.value === 'from_date' ? applyFromDate.value : undefined })
+      message.value = result.regenerated_lessons > 0
+        ? `模板已更新，已重建 ${result.regenerated_lessons} 节课时`
+        : '模板已更新'
+      toast.show(message.value); emit('refresh-templates')
     }
   } catch (err) { error.value = parseFormError(err, '保存失败，请稍后再试') }
   finally { saving.value = false }
@@ -70,6 +73,9 @@ async function removeTemplate() {
       <template v-if="mode === 'edit'">
         <FormField for-id="template-apply" label="应用方式" class="md:col-span-2"><template #default="{ describedby }"><select id="template-apply" v-model="applyMode" class="input" :disabled="busy" :aria-describedby="describedby || undefined"><option value="future_only">从今天起重建未来课时</option><option value="from_date">指定日期重建</option><option value="template_only">仅更新模板</option><option value="update_all">更新所有未来课时</option></select></template></FormField>
         <FormField v-if="applyMode === 'from_date'" for-id="template-apply-from" label="起始日期" required class="md:col-span-2"><template #default="{ describedby }"><input id="template-apply-from" v-model="applyFromDate" class="input" type="date" required :disabled="busy" :aria-describedby="describedby || undefined" /></template></FormField>
+        <p v-if="applyMode !== 'template_only'" class="md:col-span-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3.5 py-2.5 text-[11px] text-amber-700 dark:text-amber-300">
+          未来待上课时将按新模板重新生成；手动调整过的时间或日期会被替换。
+        </p>
       </template>
       <InlineAlert v-if="message" class="md:col-span-2" tone="success" :message="message" /><InlineAlert v-if="error" class="md:col-span-2" tone="error" :message="error" />
       <div class="md:col-span-2 flex flex-wrap gap-2"><AsyncButton :pending="saving" :disabled="busy" pending-label="保存中…">{{ mode === 'create' ? '保存模板' : '保存修改' }}</AsyncButton><button v-if="mode === 'edit'" type="button" data-action="delete-template" class="btn-danger" :disabled="busy" @click="confirmDeleteOpen = true">删除模板</button></div>

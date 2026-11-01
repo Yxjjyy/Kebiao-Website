@@ -22,6 +22,7 @@ import TemplateFormModal from '@/components/students/TemplateFormModal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import ErrorNotice from '@/components/ui/ErrorNotice.vue'
 import { isCancel } from 'axios'
+import { useToast } from '@/composables/useToast'
 import { toAppError, type AppError } from '@/api/error'
 import { exportApi } from '@/api/export'
 import { lessonsApi } from '@/api/lessons'
@@ -45,6 +46,7 @@ import { normalizeSelectedStudentId } from '@/lib/studentWorkspace'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
+const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 const activeTab = ref<string>('schedule')
@@ -393,6 +395,7 @@ async function handleRescheduleMode(mode: '1' | '2' | '3') {
       status: payload.lesson.status,
     })
     await loadDashboard()
+    toast.show('课时已移动')
   } catch (error) {
     scheduleError.value = mutationError(error, '移动失败：目标时间可能存在冲突')
   }

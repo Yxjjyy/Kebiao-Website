@@ -25,10 +25,11 @@ function headerValue(headers: unknown, name: string): string {
 function conflictMessage(detail: ConflictResponse): string {
   if (typeof detail.message === 'string' && detail.message) return detail.message
   if (Array.isArray(detail.conflicts) && detail.conflicts.length) {
-    const conflicts = detail.conflicts
+    const shown = detail.conflicts.slice(0, 5)
       .map(item => `${item.student_name} · ${item.date} ${item.start_time.slice(0, 5)}`)
       .join('；')
-    return `时间冲突：${conflicts}`
+    const suffix = detail.conflicts.length > 5 ? `；等 ${detail.conflicts.length} 处` : ''
+    return `时间冲突：${shown}${suffix}`
   }
   return '数据冲突，请检查后重试'
 }

@@ -186,6 +186,9 @@
 
 创建模板时会自动生成 `generate_weeks_ahead` 周内的课程实例。
 
+若目标时段与已有课程冲突，返回 `409 time_conflict`，不会创建模板或生成任何课时。
+`effective_to` 不能早于 `effective_from`，否则返回 422。
+
 ---
 
 **PATCH** `/api/v1/templates/{template_id}` — 更新模板
@@ -195,6 +198,10 @@
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | apply_mode | string | 对已有课程的处理策略 |
+| apply_from_date | date | `apply_mode=from_date` 时必填 |
+
+更新需要重建未来课时时，若与已有课程冲突，返回 `409 time_conflict`；本次更新会整体回滚，原模板和原课时保持不变。
+`effective_to` 不能早于 `effective_from`，否则返回 422。
 
 ---
 

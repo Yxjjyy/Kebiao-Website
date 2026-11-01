@@ -52,6 +52,21 @@ describe('toAppError', () => {
     expect(result.message).toBe('时间冲突：林晓 · 2026-08-13 10:00')
   })
 
+  it('limits long conflict lists while keeping the total count', () => {
+    const conflicts = Array.from({ length: 6 }, (_, index) => ({
+      student_name: `学生${index}`,
+      date: '2026-08-13',
+      start_time: '10:00',
+    }))
+    const result = toAppError(axiosError({
+      status: 409,
+      detail: { error: 'time_conflict', conflicts },
+    }))
+    expect(result.message).toContain('学生0 · 2026-08-13 10:00')
+    expect(result.message).toContain('等 6 处')
+    expect(result.message).not.toContain('学生5')
+  })
+
   it('classifies a 503 response as a retryable server error', () => {
     expect(toAppError(axiosError({ status: 503, requestId: 'req-server' }))).toMatchObject({
       kind: 'server', status: 503, requestId: 'req-server', retryable: true,
